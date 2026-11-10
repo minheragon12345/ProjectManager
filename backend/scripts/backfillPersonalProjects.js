@@ -5,6 +5,7 @@ const connectDB = require('../src/config/db');
 const User = require('../src/models/userModel');
 const Note = require('../src/models/noteModel');
 const Project = require('../src/models/projectModel');
+const { ensurePersonalProject } = require('../src/utils/personalProject');
 
 const APPLY = process.argv.includes('--apply');
 
@@ -23,17 +24,7 @@ async function main() {
     let personal = await Project.findOne({ owner: user._id, isPersonal: true, isDeleted: false });
 
     if (!personal) {
-      if (APPLY) {
-        personal = await Project.create({
-          name: 'Personal',
-          description: 'Your personal workspace for standalone tasks.',
-          owner: user._id,
-          members: [],
-          status: 'active',
-          budget: { amount: 0, currency: 'USD', type: 'hourly' },
-          isPersonal: true,
-        });
-      }
+      if (APPLY) personal = await ensurePersonalProject(user._id);
       projectsCreated += 1;
       console.log(`  [+] Personal project ${APPLY ? 'created' : 'WOULD create'} for ${user.email}`);
     } else {

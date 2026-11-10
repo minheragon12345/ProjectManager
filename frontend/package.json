@@ -18,7 +18,6 @@
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.12.0",
     "react-toastify": "^11.0.5",
     "recharts": "^3.8.1"

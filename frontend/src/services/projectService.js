@@ -135,9 +135,10 @@ export const getProjectSchedule = async (id, { constrained = false } = {}) => {
   }
 };
 
-export const getResourceCurve = async (id) => {
+export const getResourceCurve = async (id, { constrained = false } = {}) => {
   try {
-    const res = await API.get(`/projects/${id}/resource-curve`);
+    const params = constrained ? { constrained: 'true' } : undefined;
+    const res = await API.get(`/projects/${id}/resource-curve`, { params });
     return res.data;
   } catch (error) {
     const message = error.response?.data?.message || 'Could not load resource curve';

@@ -86,4 +86,13 @@ const enriched = taskData.map((t) => {
   assert.strictEqual(threw, true, 'expected throw for cap=0');
 }
 
+// Zero-length tasks need nobody, whatever peopleRequired says.
+{
+  const result = serialSchedule([
+    { id: 'work', duration: 2, dependencies: [], peopleRequired: 2 },
+    { id: 'milestone', duration: 0, dependencies: ['work'], peopleRequired: 5 },
+  ], 2);
+  assert.strictEqual(result.projectDuration, 2);
+}
+
 console.log('All serial-scheduler tests pass.');

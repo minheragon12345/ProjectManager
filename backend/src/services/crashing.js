@@ -3,7 +3,7 @@
 // combination when multiple paths are simultaneously critical).
 // Returns rows + optimalIndex + steps. Throws on dependency cycle.
 
-const { buildGraph, computeSchedule } = require('./scheduler');
+const { buildGraph, computeSchedule, isCriticalEdge, roundTime } = require('./scheduler');
 
 function isCrashable(t) {
   return (
@@ -24,7 +24,7 @@ function findAllCriticalPaths(graph, slacks) {
 
   const sources = criticalNodes.filter((id) => {
     const preds = graph.predecessors.get(id) || [];
-    return preds.every((p) => !isCritical(p));
+    return preds.every((p) => !isCriticalEdge(slacks, p, id));
   });
 
   const paths = [];
@@ -32,7 +32,7 @@ function findAllCriticalPaths(graph, slacks) {
 
   function dfs(node) {
     stack.push(node);
-    const succs = (graph.successors.get(node) || []).filter(isCritical);
+    const succs = (graph.successors.get(node) || []).filter((s) => isCriticalEdge(slacks, node, s));
     if (succs.length === 0) {
       paths.push(stack.slice());
     } else {
@@ -138,6 +138,8 @@ function computeCrashingTable(tasks, lostRevenueFn, { maxIter = 200 } = {}) {
     }));
     const sched = computeSchedule(schedTasks);
     const dur = sched.projectDuration;
+    // The previous move may shorten the project by less than it shortened the tasks.
+    if (steps.length) steps[steps.length - 1].to = dur;
 
     const lostValue = Number(lostRev(dur));
     const lostFinal = Number.isFinite(lostValue) ? lostValue : 0;
@@ -149,19 +151,24 @@ function computeCrashingTable(tasks, lostRevenueFn, { maxIter = 200 } = {}) {
       totalCost,
     });
 
+    if (iter === maxIter) break;
+
     // Build graph again to find all critical paths.
     const graph = buildGraph(schedTasks);
     const criticalPaths = findAllCriticalPaths(graph, sched.slacks);
     const move = findMinCostMove(criticalPaths, byId);
     if (!move) break;
 
-    // Apply move: each task in the cut loses 1 unit.
+    // Each task in the cut loses 1 unit, or less when one of them is closer than
+    // 1 unit to its minimum duration.
+    const amount = Math.min(1, ...move.taskIds.map((id) => byId.get(id).current - byId.get(id).minDuration));
     for (const id of move.taskIds) {
       const s = byId.get(id);
-      s.current -= 1;
+      s.current = roundTime(s.current - amount);
     }
-    cumulative += move.cost;
-    steps.push({ from: dur, to: dur - 1, taskIds: move.taskIds.slice(), cost: move.cost });
+    const cost = roundTime(move.cost * amount);
+    cumulative = roundTime(cumulative + cost);
+    steps.push({ from: dur, to: null, taskIds: move.taskIds.slice(), cost });
   }
 
   // Optimal = row with minimum totalCost (first match wins on ties).

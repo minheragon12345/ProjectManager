@@ -7,7 +7,6 @@ export const getNotes = async (search = '', scope = 'all', extra = {}) => {
     if (scope && scope !== 'all') params.scope = scope; // mine | shared
     if (extra.projectId) params.projectId = extra.projectId;
     if (extra.status) params.status = extra.status;
-    if (extra.category) params.category = extra.category;
     const response = await API.get('/notes', { params });
     return response.data;
   } catch (error) {

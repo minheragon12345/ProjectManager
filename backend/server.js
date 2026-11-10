@@ -1,25 +1,23 @@
-const express = require('express');
-const cors = require('cors');
 const dotenv = require('dotenv');
-const connectDB = require('./src/config/db');
-const authController = require('./src/controller/authController');
-const noteController = require('./src/controller/noteController');
-const adminController = require('./src/controller/adminController');
-const projectController = require('./src/controller/projectController');
-const timeEntryController = require('./src/controller/timeEntryController');
 
 dotenv.config();
-connectDB();
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+const isProduction = process.env.NODE_ENV === 'production';
+const required = isProduction ? ['MONGO_URI', 'JWT_SECRET', 'CORS_ORIGIN'] : ['MONGO_URI', 'JWT_SECRET'];
+const missing = required.filter((name) => !process.env[name]);
+if (missing.length) {
+  console.error(`Missing environment variables: ${missing.join(', ')}. See backend/.env.example.`);
+  process.exit(1);
+}
 
-app.use('/api/auth', authController);
-app.use('/api/notes', noteController);
-app.use('/api/projects', projectController);
-app.use('/api/time-entries', timeEntryController);
-app.use('/api/admin', adminController);
+// Loaded after dotenv so the app sees CORS_ORIGIN and TRUST_PROXY.
+const connectDB = require('./src/config/db');
+const app = require('./src/app');
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+connectDB()
+  .then(() => app.listen(PORT, () => console.log(`Server running on port ${PORT}`)))
+  .catch((err) => {
+    console.error('Could not connect to MongoDB:', err.message);
+    process.exit(1);
+  });

@@ -1,9 +1,8 @@
 const AuditLog = require('../models/auditLogModel');
 
+// req.ip only reads X-Forwarded-For when TRUST_PROXY says a proxy sets it, so clients can't fake it.
 function getClientIp(req) {
-  const xf = req.headers['x-forwarded-for'];
-  if (xf) return String(xf).split(',')[0].trim();
-  return req.ip || req.connection?.remoteAddress || '';
+  return req.ip || req.socket?.remoteAddress || '';
 }
 
 async function writeAudit(req, { action, targetType, targetId, metadata }) {

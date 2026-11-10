@@ -56,7 +56,7 @@ function patchForColumn(targetCol, task) {
 }
 
 function KanbanCard({ task, canEdit, onClick, isOverlay = false, timeUnit = 'day', schedule = null }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const id = String(task._id || task.id);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id,
@@ -140,7 +140,7 @@ function KanbanCard({ task, canEdit, onClick, isOverlay = false, timeUnit = 'day
         ) : null}
         {task.deadline ? (
           <span className={overdue ? 'overdue-text' : ''}>
-            {new Date(task.deadline).toLocaleDateString('vi-VN')}
+            {new Date(task.deadline).toLocaleDateString(locale)}
           </span>
         ) : null}
       </div>
@@ -221,9 +221,6 @@ export default function KanbanBoard({ tasks, canEdit, onTaskMove, onCardClick, t
     for (const t of tasks || []) {
       const col = deriveColumn(t);
       if (map[col]) map[col].push(t);
-    }
-    for (const col of Object.keys(map)) {
-      map[col].sort((a, b) => (b.priority || 0) - (a.priority || 0));
     }
     return map;
   }, [tasks]);

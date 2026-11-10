@@ -21,9 +21,10 @@ const UNIT_LABEL = { hour: 'h', day: 'd', week: 'w', month: 'mo' };
  *
  * Props:
  *   projectId — string
+ *   constrained — use the headcount-limited schedule
  *   refreshKey — optional value; when it changes, refetch (e.g. on task save)
  */
-export default function ResourceCurve({ projectId, refreshKey }) {
+export default function ResourceCurve({ projectId, constrained = false, refreshKey }) {
   const { t } = useI18n();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ export default function ResourceCurve({ projectId, refreshKey }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getResourceCurve(projectId)
+    getResourceCurve(projectId, { constrained })
       .then((res) => {
         if (cancelled) return;
         setData(res);
@@ -50,7 +51,7 @@ export default function ResourceCurve({ projectId, refreshKey }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId, refreshKey]);
+  }, [projectId, constrained, refreshKey]);
 
   const unitShort = UNIT_LABEL[data?.timeUnit] || 'd';
 
@@ -118,6 +119,8 @@ export default function ResourceCurve({ projectId, refreshKey }) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary, #e5e7eb)" />
             <XAxis
               dataKey="t"
+              type="number"
+              domain={[0, 'dataMax']}
               stroke="var(--text-secondary, #4b5563)"
               tick={{ fontSize: 12 }}
               label={{
@@ -163,7 +166,7 @@ export default function ResourceCurve({ projectId, refreshKey }) {
               }}
             />
             <Area
-              type="step"
+              type="stepAfter"
               dataKey="safe"
               stackId="1"
               stroke="#4b5563"
@@ -172,7 +175,7 @@ export default function ResourceCurve({ projectId, refreshKey }) {
               isAnimationActive={false}
             />
             <Area
-              type="step"
+              type="stepAfter"
               dataKey="over"
               stackId="1"
               stroke="#b91c1c"

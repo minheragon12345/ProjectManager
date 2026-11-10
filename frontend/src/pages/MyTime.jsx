@@ -7,17 +7,15 @@ import {
   ChevronRight,
   Clock,
   Loader,
-  Moon,
-  Monitor,
-  Sun,
   Trash2,
   CalendarDays,
-  LogOut,
 } from 'lucide-react';
 import { listTimeEntries, deleteTimeEntry } from '../services/timeEntryService';
 import { useTheme } from '../hooks/useTheme';
 import { useI18n } from '../i18n';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import ThemeButton from '../components/ThemeButton';
+import LogoutButton from '../components/LogoutButton';
 import { getEntryDateString, getLocalDateString } from '../utils/date';
 import './MyTime.css';
 
@@ -37,19 +35,19 @@ function addDays(date, days) {
   return d;
 }
 
-function formatRange(start) {
+function formatRange(start, locale) {
   const end = addDays(start, 6);
   const fmt = { day: '2-digit', month: 'short' };
-  return `${start.toLocaleDateString('vi-VN', fmt)} – ${end.toLocaleDateString('vi-VN', fmt)} ${end.getFullYear()}`;
+  return `${start.toLocaleDateString(locale, fmt)} – ${end.toLocaleDateString(locale, fmt)} ${end.getFullYear()}`;
 }
 
-function dayLabel(date) {
-  return date.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: 'short' });
+function dayLabel(date, locale) {
+  return date.toLocaleDateString(locale, { weekday: 'short', day: '2-digit', month: 'short' });
 }
 
 const MyTime = () => {
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { pref: themePref, resolved: theme, cycle: cycleTheme } = useTheme();
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -148,33 +146,14 @@ const MyTime = () => {
 
         <div className="mytime-actions">
           <LanguageSwitcher />
-          <button className="btn" onClick={cycleTheme} title={`Theme: ${themePref}`}>
-            {themePref === 'light' ? (
-              <Sun size={18} />
-            ) : themePref === 'dark' ? (
-              <Moon size={18} />
-            ) : (
-              <Monitor size={18} />
-            )}
-          </button>
+          <ThemeButton pref={themePref} onClick={cycleTheme} />
           <button
             className="btn"
             onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
           >
             <ArrowLeft size={18} /> {t('common.back')}
           </button>
-          <button
-            className="btn"
-            onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
-              window.dispatchEvent(new Event('authChange'));
-              navigate('/login');
-            }}
-            title={t('common.signOut')}
-          >
-            <LogOut size={18} /> {t('common.logout')}
-          </button>
+          <LogoutButton />
         </div>
       </div>
 
@@ -184,7 +163,7 @@ const MyTime = () => {
         </button>
         <div className="mytime-week-label">
           <CalendarDays size={16} />
-          <span>{formatRange(weekStart)}</span>
+          <span>{formatRange(weekStart, locale)}</span>
         </div>
         <button className="btn" onClick={goNext} title={t('mytime.nextWeek')}>
           <ChevronRight size={18} />
@@ -211,7 +190,7 @@ const MyTime = () => {
           {days.map((day) => (
             <div className="mytime-day" key={day.iso}>
               <div className="mytime-day-header">
-                <span className="mytime-day-label">{dayLabel(day.date)}</span>
+                <span className="mytime-day-label">{dayLabel(day.date, locale)}</span>
                 <span className="mytime-day-total">
                   {day.total.toFixed(2)}h
                   {day.billable > 0 && day.billable !== day.total ? (

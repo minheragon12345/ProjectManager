@@ -7,13 +7,14 @@ import {
   listTimeEntries,
 } from '../services/timeEntryService';
 import { getLocalDateString } from '../utils/date';
+import { useI18n } from '../i18n';
 import './TimeLogSection.css';
 
-function formatDate(value) {
+function formatDate(value, locale) {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('vi-VN', { timeZone: 'UTC' });
+  return d.toLocaleDateString(locale, { timeZone: 'UTC' });
 }
 
 function getInitialForm() {
@@ -26,6 +27,7 @@ function getInitialForm() {
 }
 
 export default function TimeLogSection({ taskId, canWrite, currentUserId, onChange }) {
+  const { t, locale } = useI18n();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(getInitialForm);
@@ -44,11 +46,11 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
       const data = await listTimeEntries({ task: taskId, limit: 50 });
       setEntries(Array.isArray(data?.entries) ? data.entries : []);
     } catch (err) {
-      toast.error(err.message || 'Could not load entries');
+      toast.error(err.message || t('timelog.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [taskId]);
+  }, [taskId, t]);
 
   useEffect(() => {
     fetchEntries();
@@ -60,7 +62,7 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
     if (!taskId) return;
     const hours = Number(form.hours);
     if (!Number.isFinite(hours) || hours <= 0) {
-      toast.error('Hours must be greater than 0');
+      toast.error(t('timelog.hoursInvalid'));
       return;
     }
     setSaving(true);
@@ -72,12 +74,12 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
         description: form.description.trim(),
         billable: !!form.billable,
       });
-      toast.success('Time logged');
+      toast.success(t('timelog.logged'));
       setForm({ ...getInitialForm(), billable: form.billable });
       await fetchEntries();
       onChange?.();
     } catch (err) {
-      toast.error(err.message || 'Could not log time');
+      toast.error(err.message || t('timelog.logFailed'));
     } finally {
       setSaving(false);
     }
@@ -86,15 +88,15 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
   const handleDelete = async (entry) => {
     const id = entry.id;
     if (!id) return;
-    if (!window.confirm(`Delete this ${entry.hours}h entry?`)) return;
+    if (!window.confirm(t('timelog.deleteConfirm', { hours: entry.hours }))) return;
     setPendingId(id);
     try {
       await deleteTimeEntry(id);
-      toast.success('Entry deleted');
+      toast.success(t('timelog.deleted'));
       await fetchEntries();
       onChange?.();
     } catch (err) {
-      toast.error(err.message || 'Could not delete');
+      toast.error(err.message || t('timelog.deleteFailed'));
     } finally {
       setPendingId(null);
     }
@@ -106,8 +108,8 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
     <div className="time-log-section">
       <div className="time-log-header">
         <h4>
-          <Clock size={16} /> Time entries
-          <span className="time-log-total">{totalHours.toFixed(2)}h logged</span>
+          <Clock size={16} /> {t('timelog.title')}
+          <span className="time-log-total">{t('timelog.total', { hours: totalHours.toFixed(2) })}</span>
         </h4>
       </div>
 
@@ -120,7 +122,7 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
             step="0.25"
             value={form.hours}
             onChange={(e) => setForm({ ...form, hours: e.target.value })}
-            placeholder="hrs"
+            placeholder={t('timelog.hoursPlaceholder')}
             className="time-log-hours"
             required
           />
@@ -134,17 +136,17 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
             type="text"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="What did you work on?"
+            placeholder={t('timelog.descPlaceholder')}
             className="time-log-desc"
             maxLength={1000}
           />
-          <label className="time-log-billable" title="Billable">
+          <label className="time-log-billable" title={t('timelog.billable')}>
             <input
               type="checkbox"
               checked={!!form.billable}
               onChange={(e) => setForm({ ...form, billable: e.target.checked })}
             />
-            <span>Billable</span>
+            <span>{t('timelog.billable')}</span>
           </label>
           <button
             type="button"
@@ -153,16 +155,16 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
             onClick={handleSubmit}
           >
             {saving ? <Loader size={14} className="spin" /> : <Plus size={14} />}
-            <span>{saving ? 'Logging…' : 'Log time'}</span>
+            <span>{saving ? t('timelog.submitting') : t('timelog.submit')}</span>
           </button>
         </div>
       ) : null}
 
       <div className="time-log-list">
         {loading ? (
-          <div className="time-log-empty"><Loader size={16} className="spin" /> Loading…</div>
+          <div className="time-log-empty"><Loader size={16} className="spin" /> {t('common.loading')}</div>
         ) : entries.length === 0 ? (
-          <div className="time-log-empty">No time entries yet.</div>
+          <div className="time-log-empty">{t('timelog.empty')}</div>
         ) : (
           entries.map((e) => {
             const ownEntry = currentUserId && e.user?.id === currentUserId;
@@ -171,11 +173,11 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
               <div className={`time-log-entry ${pending ? 'is-pending' : ''}`} key={e.id}>
                 <div className="time-log-entry-main">
                   <span className="time-log-entry-hours">{Number(e.hours).toFixed(2)}h</span>
-                  <span className="time-log-entry-date">{formatDate(e.date)}</span>
+                  <span className="time-log-entry-date">{formatDate(e.date, locale)}</span>
                   {e.billable ? (
-                    <span className="time-log-chip billable">Billable</span>
+                    <span className="time-log-chip billable">{t('timelog.billable')}</span>
                   ) : (
-                    <span className="time-log-chip">Non-billable</span>
+                    <span className="time-log-chip">{t('timelog.nonBillable')}</span>
                   )}
                   {e.description ? (
                     <span className="time-log-entry-desc" title={e.description}>{e.description}</span>
@@ -190,7 +192,7 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
                     className="icon-btn danger time-log-delete"
                     onClick={() => handleDelete(e)}
                     disabled={pending}
-                    title="Delete entry"
+                    title={t('timelog.delete')}
                   >
                     {pending ? <Loader size={14} className="spin" /> : <Trash2 size={14} />}
                   </button>

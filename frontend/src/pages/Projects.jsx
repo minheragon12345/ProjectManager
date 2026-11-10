@@ -5,9 +5,6 @@ import {
   Plus,
   Search,
   Loader,
-  Moon,
-  Sun,
-  Monitor,
   Clock,
   FileText,
   Archive,
@@ -15,7 +12,6 @@ import {
   FolderKanban,
   Users,
   X,
-  LogOut,
 } from 'lucide-react';
 import {
   getProjects,
@@ -26,6 +22,8 @@ import {
 import { useTheme } from '../hooks/useTheme';
 import { useI18n } from '../i18n';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import ThemeButton from '../components/ThemeButton';
+import LogoutButton from '../components/LogoutButton';
 import './Projects.css';
 
 const SCOPE_OPTIONS = [
@@ -63,6 +61,7 @@ const Projects = () => {
   const { pref: themePref, resolved: theme, cycle: cycleTheme } = useTheme();
 
   const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [scope, setScope] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active');
 
@@ -82,14 +81,20 @@ const Projects = () => {
   const fetchProjects = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getProjects({ search, scope, status: statusFilter });
+      const data = await getProjects({ search: query, scope, status: statusFilter });
       setProjects(Array.isArray(data?.projects) ? data.projects : []);
     } catch (err) {
-      toast.error(err.message || t('projects.loading'));
+      toast.error(err.message || t('projects.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [search, scope, statusFilter]);
+  }, [query, scope, statusFilter]);
+
+  // Search once typing pauses instead of on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -133,7 +138,7 @@ const Projects = () => {
       setShowModal(false);
       fetchProjects();
     } catch (err) {
-      toast.error(err.message || t('projects.created'));
+      toast.error(err.message || t('projects.createFailed'));
     } finally {
       setSaving(false);
     }
@@ -145,7 +150,7 @@ const Projects = () => {
       toast.success(project.status === 'archived' ? t('projects.restored') : t('projects.archived'));
       fetchProjects();
     } catch (err) {
-      toast.error(err.message || 'Error');
+      toast.error(err.message || t('projects.archiveFailed'));
     }
   };
 
@@ -156,11 +161,9 @@ const Projects = () => {
       toast.success(t('projects.deleted'));
       fetchProjects();
     } catch (err) {
-      toast.error(err.message || t('projects.deleted'));
+      toast.error(err.message || t('projects.deleteFailed'));
     }
   };
-
-  const toggleTheme = cycleTheme;
 
   return (
     <div className={`projects-container ${theme === 'dark' ? 'dark-theme' : ''}`}>
@@ -184,7 +187,7 @@ const Projects = () => {
               placeholder={t('projects.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && fetchProjects()}
+              onKeyDown={(e) => e.key === 'Enter' && setQuery(search.trim())}
             />
           </div>
 
@@ -223,32 +226,12 @@ const Projects = () => {
           </div>
 
           <div className="action-buttons">
-            <button className="btn-secondary" onClick={toggleTheme} title={`Theme: ${themePref}`}>
-              {themePref === 'light' ? (
-                <Sun size={18} />
-              ) : themePref === 'dark' ? (
-                <Moon size={18} />
-              ) : (
-                <Monitor size={18} />
-              )}
-            </button>
+            <ThemeButton className="btn-secondary" pref={themePref} onClick={cycleTheme} />
             <button className="btn-primary" onClick={handleOpenCreate}>
               <Plus size={18} />
               <span>{t('projects.newProject')}</span>
             </button>
-            <button
-              className="btn-secondary"
-              onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                window.dispatchEvent(new Event('authChange'));
-                navigate('/login');
-              }}
-              title={t('common.signOut')}
-            >
-              <LogOut size={18} />
-              <span>{t('common.logout')}</span>
-            </button>
+            <LogoutButton className="btn-secondary" />
           </div>
         </div>
       </div>

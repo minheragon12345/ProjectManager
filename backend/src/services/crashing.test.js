@@ -97,4 +97,29 @@ assert.deepStrictEqual(steps[3], { from: 13, to: 12, taskIds: ['A'], cost: 5 }, 
   assert.strictEqual(r.rows[r.optimalIndex].duration, 7, `linear-rev optimal: ${r.rows[r.optimalIndex].duration}`);
 }
 
+// ----- Edge: less than one unit left before the minimum -----
+{
+  const r = computeCrashingTable(
+    [{ id: 'X', duration: 3.5, minDuration: 3, marginalCost: 10, dependencies: [] }],
+    (d) => d * 100,
+  );
+  // Crash only the 0.5 that is left, at half the per-unit cost, then stop at the minimum.
+  assert.deepStrictEqual(r.rows.map((row) => row.duration), [3.5, 3]);
+  assert.deepStrictEqual(r.steps, [{ from: 3.5, to: 3, taskIds: ['X'], cost: 5 }]);
+  assert.strictEqual(r.rows[1].cumulativeCrashCost, 5);
+}
+
+// ----- Edge: step records the real new duration, not "minus one" -----
+{
+  // Crashing A by 1 only gains 0.5, because B (parallel, 0.5 shorter) becomes critical.
+  const r = computeCrashingTable(
+    [
+      { id: 'A', duration: 4, minDuration: 3, marginalCost: 1, dependencies: [] },
+      { id: 'B', duration: 3.5, minDuration: null, marginalCost: null, dependencies: [] },
+    ],
+    () => 0,
+  );
+  assert.deepStrictEqual(r.steps[0], { from: 4, to: 3.5, taskIds: ['A'], cost: 1 }, `step: ${JSON.stringify(r.steps[0])}`);
+}
+
 console.log('All crashing tests pass.');

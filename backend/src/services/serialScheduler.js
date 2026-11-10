@@ -3,6 +3,8 @@
 // start as many as fit under maxHeadcount, then advance time to the next
 // finishing event. Returns constrained schedule.
 
+const { roundTime } = require('./scheduler');
+
 function sortByPriority(executable) {
   // Priority rule: smallest ES, then smallest LS, then smallest duration.
   return executable.slice().sort((a, b) => {
@@ -18,9 +20,13 @@ function serialSchedule(tasks, maxHeadcount) {
     throw new Error('maxHeadcount must be a positive number');
   }
 
+  // Zero-length tasks (milestones, parent finish points, cancelled tasks) need nobody,
+  // so they never wait for a free person.
+  const getPeople = (t) => (Number(t.duration) > 0 ? Number(t.peopleRequired) || 1 : 0);
+
   // Sanity: any single task that exceeds the cap can never run.
   for (const t of tasks) {
-    const r = Number(t.peopleRequired) || 1;
+    const r = getPeople(t);
     if (r > cap) {
       throw new Error(`Task ${t.id} needs ${r} people but headcount cap is ${cap}`);
     }
@@ -30,7 +36,7 @@ function serialSchedule(tasks, maxHeadcount) {
     id: String(t.id),
     duration: Number(t.duration) || 0,
     dependencies: (t.dependencies || []).map(String),
-    peopleRequired: Number(t.peopleRequired) || 1,
+    peopleRequired: getPeople(t),
     ES_orig: Number(t.ES) || 0,
     LS_orig: Number(t.LS) || 0,
   }]));
@@ -75,10 +81,11 @@ function serialSchedule(tasks, maxHeadcount) {
     for (const cand of ordered) {
       if (cand.peopleRequired <= remaining) {
         // Start it: ES = now, EF = now + duration.
-        result.set(cand.id, { ES: now, EF: now + cand.duration });
+        const endTime = roundTime(now + cand.duration);
+        result.set(cand.id, { ES: now, EF: endTime });
         running.push({
           id: cand.id,
-          endTime: now + cand.duration,
+          endTime,
           peopleRequired: cand.peopleRequired,
         });
         remaining -= cand.peopleRequired;

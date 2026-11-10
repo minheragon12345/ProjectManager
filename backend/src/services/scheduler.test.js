@@ -132,4 +132,43 @@ for (const id of Object.keys(expectedFree)) {
   assert.deepStrictEqual(r.points, [{ t: 0, demand: 0 }]);
 }
 
+// ----- Decimal durations: 0.1 + 0.2 must still tie with 0.3 -----
+{
+  const r = computeSchedule([
+    { id: 'A', duration: 0.1, dependencies: [] },
+    { id: 'B', duration: 0.2, dependencies: ['A'] },
+    { id: 'C', duration: 0.3, dependencies: [] },
+  ]);
+  assert.strictEqual(r.projectDuration, 0.3, `decimal duration: ${r.projectDuration}`);
+  for (const id of ['A', 'B', 'C']) {
+    assert.strictEqual(r.slacks.get(id).totalSlack, 0, `${id} slack: ${r.slacks.get(id).totalSlack}`);
+    assert.strictEqual(r.slacks.get(id).isCritical, true, `${id} should be critical`);
+  }
+}
+
+// ----- Critical path only follows edges where one task drives the next -----
+// c→s is a dependency between two critical tasks, but c ends at 1 and s starts at 5,
+// so the real critical chains are c→s2 and x→s.
+{
+  const r = computeSchedule([
+    { id: 'c', duration: 1, dependencies: [] },
+    { id: 'x', duration: 5, dependencies: [] },
+    { id: 's', duration: 6, dependencies: ['c', 'x'] },
+    { id: 's2', duration: 10, dependencies: ['c'] },
+  ]);
+  assert.deepStrictEqual([...r.criticalSet].sort(), ['c', 's', 's2', 'x']);
+  assert.deepStrictEqual(r.criticalPath, ['c', 's2'], `criticalPath: ${JSON.stringify(r.criticalPath)}`);
+}
+
+// Resource curve sees tasks that start and end between whole steps.
+{
+  const curve = computeResourceCurve([
+    { id: 'short', ES: 0.2, duration: 0.5, peopleRequired: 3 },
+    { id: 'long', ES: 0, duration: 2, peopleRequired: 1 },
+  ], 2);
+  assert.strictEqual(curve.peak, 4);
+  assert.deepStrictEqual(curve.points.map((p) => p.t), [0, 0.2, 0.7, 1, 2]);
+  assert.deepStrictEqual(curve.points.map((p) => p.demand), [1, 4, 1, 1, 0]);
+}
+
 console.log('All scheduler tests pass.');

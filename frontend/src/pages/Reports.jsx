@@ -6,17 +6,15 @@ import {
   Download,
   FileText,
   Loader,
-  Moon,
-  Monitor,
   RefreshCcw,
-  Sun,
-  LogOut,
 } from 'lucide-react';
 import { getProjects, getBudgetSummary } from '../services/projectService';
 import { listTimeEntries } from '../services/timeEntryService';
 import { useTheme } from '../hooks/useTheme';
 import { useI18n } from '../i18n';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import ThemeButton from '../components/ThemeButton';
+import LogoutButton from '../components/LogoutButton';
 import { getLocalDateString } from '../utils/date';
 import './Reports.css';
 
@@ -239,33 +237,14 @@ const Reports = () => {
 
         <div className="reports-actions">
           <LanguageSwitcher />
-          <button className="btn" onClick={cycleTheme} title={`Theme: ${themePref}`}>
-            {themePref === 'light' ? (
-              <Sun size={18} />
-            ) : themePref === 'dark' ? (
-              <Moon size={18} />
-            ) : (
-              <Monitor size={18} />
-            )}
-          </button>
+          <ThemeButton pref={themePref} onClick={cycleTheme} />
           <button
             className="btn"
             onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
           >
             <ArrowLeft size={18} /> {t('common.back')}
           </button>
-          <button
-            className="btn"
-            onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
-              window.dispatchEvent(new Event('authChange'));
-              navigate('/login');
-            }}
-            title={t('common.signOut')}
-          >
-            <LogOut size={18} /> {t('common.logout')}
-          </button>
+          <LogoutButton />
         </div>
       </div>
 

@@ -7,6 +7,7 @@ const {
   canWriteTask,
   canCommentTask,
   isTaskOwner,
+  canMoveTask,
 } = require('./access');
 const { escapeRegex } = require('./regex');
 
@@ -57,6 +58,24 @@ assert.strictEqual(canWriteTask(task, 'mod'), true);
 assert.strictEqual(canWriteTask(task, 'reviewer'), false);
 assert.strictEqual(canCommentTask(task, 'reviewer'), true);
 assert.strictEqual(canCommentTask(task, 'viewer'), false);
+
+// Only the creator or a project owner/moderator can move a task to another project.
+assert.strictEqual(canMoveTask(task, 'editor'), true);
+assert.strictEqual(canMoveTask(task, 'owner'), true);
+assert.strictEqual(canMoveTask(task, 'mod'), true);
+assert.strictEqual(canMoveTask(task, 'assignedViewer'), false);
+assert.strictEqual(canMoveTask({ ...task, user: 'someoneElse' }, 'editor'), false);
+assert.strictEqual(canMoveTask(loose, 'me'), true);
+assert.strictEqual(canMoveTask(loose, 'friend'), false);
+
+// Archived projects are read-only, even for the creator and the project owner.
+const archivedTask = { ...task, project: { ...project, status: 'archived' } };
+assert.strictEqual(getTaskAccess(archivedTask, 'editor'), 'read');
+assert.strictEqual(getTaskAccess(archivedTask, 'owner'), 'read');
+assert.strictEqual(getTaskAccess(archivedTask, 'stranger'), null);
+assert.strictEqual(canWriteTask(archivedTask, 'owner'), false);
+assert.strictEqual(canCommentTask(archivedTask, 'reviewer'), false);
+assert.strictEqual(canMoveTask(archivedTask, 'owner'), false);
 
 assert.strictEqual(escapeRegex('(a+)+$'), '\\(a\\+\\)\\+\\$');
 assert.ok(new RegExp(escapeRegex('a.b*c')).test('xa.b*cx'));

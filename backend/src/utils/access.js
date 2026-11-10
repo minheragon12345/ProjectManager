@@ -21,6 +21,7 @@ function getTaskAccess(task, userId) {
   if (!id || !task) return null;
   const projectRole = task.project ? getProjectRole(task.project, id) : null;
   if (task.project && !projectRole) return null;
+  if (task.project?.status === 'archived') return 'read';
   if (String(task.user?._id || task.user || '') === id) return 'owner';
   const assignees = Array.isArray(task.assignees) ? task.assignees : [];
   if (assignees.some((assignee) => String(assignee?._id || assignee) === id)) return 'write';
@@ -45,6 +46,14 @@ function isTaskOwner(task, userId) {
   return getTaskAccess(task, userId) === 'owner';
 }
 
+// Moving a task pulls it out of its project's schedule, so write access alone isn't enough.
+function canMoveTask(task, userId) {
+  if (task?.project?.status === 'archived') return false;
+  if (isTaskOwner(task, userId)) return true;
+  const role = task?.project ? getProjectRole(task.project, userId) : null;
+  return role === 'owner' || role === 'moderator';
+}
+
 module.exports = {
   getProjectRole,
   getAccessForRole,
@@ -53,4 +62,5 @@ module.exports = {
   canWriteTask,
   canCommentTask,
   isTaskOwner,
+  canMoveTask,
 };

@@ -49,13 +49,13 @@ function addDays(d, n) {
   return x;
 }
 
-function fmtWeek(d) {
+function fmtWeek(d, locale) {
   const fmt = { day: '2-digit', month: 'short' };
-  return d.toLocaleDateString('vi-VN', fmt);
+  return d.toLocaleDateString(locale, fmt);
 }
 
 export default function ProjectDashboard({ projectId, currency = 'USD' }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [budget, setBudget] = useState(null);
   const [entries, setEntries] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -122,14 +122,14 @@ export default function ProjectDashboard({ projectId, currency = 'USD' }) {
       const key = cur.toISOString().slice(0, 10);
       const hit = buckets.get(key);
       out.push({
-        week: fmtWeek(cur),
+        week: fmtWeek(cur, locale),
         hours: Math.round(((hit?.hours) || 0) * 100) / 100,
         billable: Math.round(((hit?.billableHours) || 0) * 100) / 100,
       });
       cur = addDays(cur, 7);
     }
     return out;
-  }, [entries]);
+  }, [entries, locale]);
 
   const usedPercent = budget?.usedPercent ?? null;
   const planned = budget?.planned;

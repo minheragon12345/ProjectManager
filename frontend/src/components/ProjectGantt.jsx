@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import Gantt from 'frappe-gantt';
 // frappe-gantt's package.json exports only `.` — the dist CSS isn't a separately
 // exported subpath, so we ship a vendored copy alongside this component.
@@ -34,7 +34,7 @@ function formatYMD(date) {
  * Wraps frappe-gantt around the schedule produced by useSchedule.
  *
  * Props:
- *   schedule: { projectDuration, timeUnit, criticalPath, tasks } (from /schedule endpoint)
+ *   schedule: { projectDuration, timeUnit, tasks: [{ ES, LS, duration, isCritical }] } (from /schedule endpoint)
  *   projectStart: Date | string (origin for ES=0); defaults to today
  *   viewMode: 'Earliest' | 'Latest' — which start to anchor bars on
  *   ganttViewMode: frappe-gantt view_mode string (Day/Week/Month/Year/Quarter Day/Half Day)
@@ -49,6 +49,12 @@ export default function ProjectGantt({
 }) {
   const containerRef = useRef(null);
   const ganttRef = useRef(null);
+  // Parents pass a new click handler on every render; keeping it in a ref stops
+  // that from destroying and rebuilding the whole chart each time.
+  const clickRef = useRef(onTaskClick);
+  useEffect(() => {
+    clickRef.current = onTaskClick;
+  }, [onTaskClick]);
 
   const origin = useMemo(() => {
     if (!projectStart) return new Date(new Date().setHours(0, 0, 0, 0));
@@ -64,26 +70,16 @@ export default function ProjectGantt({
     }
     const unit = schedule.timeUnit || 'day';
     const useLatest = viewMode === 'Latest';
-    const criticalSet = new Set((schedule.criticalPath || []).map(String));
 
     return schedule.tasks.map((t) => {
       const startOffset = useLatest ? t.LS : t.ES;
       const dur = Number(t.duration) || 0;
       const endOffset = startOffset + dur;
       const startDate = addUnits(origin, startOffset, unit);
-      // frappe-gantt v1.2.x treats `end` as the INCLUSIVE last day of the bar
-      // in Day view: a task with start=2026-05-23 and end=2026-05-26 fills
-      // 4 cells (23, 24, 25, 26). So we point `end` at the last working unit:
-      //   startOffset + duration − 1 unit
-      // and then back off by 1 day to make sure cross-unit math still lands
-      // on the right rendered cell. For 0-duration tasks we collapse end to
-      // start so frappe-gantt draws a single-cell bar.
-      let endDate;
-      if (dur <= 0) {
-        endDate = startDate;
-      } else {
-        endDate = new Date(addUnits(origin, endOffset, unit).getTime() - MS_PER_DAY);
-      }
+      // frappe-gantt treats `end` as the inclusive last day of the bar, so point it
+      // at the last moment the task runs. Subtracting a whole day instead put
+      // hour-unit tasks shorter than 24h before their own start.
+      const endDate = new Date(Math.max(startDate.getTime(), addUnits(origin, endOffset, unit).getTime() - 1));
 
       return {
         id: String(t.id),
@@ -92,7 +88,7 @@ export default function ProjectGantt({
         end: formatYMD(endDate),
         progress: 0,
         dependencies: (t.dependencies || []).map(String).join(','),
-        custom_class: criticalSet.has(String(t.id)) ? 'gantt-critical' : '',
+        custom_class: t.isCritical ? 'gantt-critical' : '',
       };
     });
   }, [schedule, origin, viewMode]);
@@ -113,9 +109,7 @@ export default function ProjectGantt({
         bar_height: 22,
         padding: 28,        // row spacing — wider rows = cleaner arrow routing
         arrow_curve: 10,    // smoother bends than default 5
-        on_click: (task) => {
-          if (onTaskClick) onTaskClick(task.id);
-        },
+        on_click: (task) => clickRef.current?.(task.id),
       });
 
       // frappe-gantt's `.gantt-container` is sized via inline
@@ -152,7 +146,7 @@ export default function ProjectGantt({
       if (containerRef.current) containerRef.current.innerHTML = '';
       ganttRef.current = null;
     };
-  }, [ganttTasks, ganttViewMode, onTaskClick]);
+  }, [ganttTasks, ganttViewMode]);
 
   return <div ref={containerRef} className="project-gantt-container" />;
 }

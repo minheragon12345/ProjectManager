@@ -1,25 +1,36 @@
 {
-  "name": "backend", 
-  "version": "1.0.0", 
-  "description": "", 
-  "main": "server.js", 
-  "scripts": { 
-    "test": "node src/services/scheduler.test.js && node src/services/serialScheduler.test.js && node src/services/crashing.test.js && node src/utils/access.test.js",
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "node src/services/scheduler.test.js && node src/services/serialScheduler.test.js && node src/services/crashing.test.js && node src/services/scheduleTasks.test.js && node src/utils/access.test.js",
+    "test:api": "node --test src/api.test.js",
     "start": "node server.js",
     "make:admin": "node scripts/makeAdmin.js",
     "migrate": "node scripts/migrateSchema.js"
-  }, 
-  "keywords": [], 
-  "author": "", 
-  "license": "ISC", 
-  "type": "commonjs", 
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "body-parser": "^2.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.0.2"
+  },
+  "devDependencies": {
+    "mongodb-memory-server-core": "^11.3.0",
+    "supertest": "^7.3.1"
+  },
+  "config": {
+    "mongodbMemoryServer": {
+      "version": "7.0.25"
+    }
   }
 }

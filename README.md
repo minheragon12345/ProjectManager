@@ -40,22 +40,30 @@
 
 ```
 backend/
-  server.js              mount /api/auth, /api/notes, /api/projects, /api/time-entries, /api/admin
+  server.js              đọc .env, kiểm tra cấu hình, kết nối MongoDB rồi chạy src/app.js
   src/
-    controller/          auth, note (task), project, timeEntry, admin
-    middleware/          JWT auth + kiểm tra ban, requireRole
+    app.js               Express app: helmet, CORS, mount /api/auth, /api/notes, /api/projects,
+                         /api/time-entries, /api/admin, middleware xử lý lỗi chung
+    controller/          auth, note (task), taskLink (bình luận, subtask, phụ thuộc), project, timeEntry, admin
+    middleware/          JWT auth + kiểm tra ban, requireRole, errorHandler (ghi log lỗi, trả 4xx/500)
     models/              User, Note (Task), Project, TimeEntry, AuditLog
     services/            thuật toán lập lịch thuần (không I/O): scheduler.js (CPM),
-                         serialScheduler.js, crashing.js + unit test
-    utils/audit.js       hàm writeAudit
-  scripts/               makeAdmin, backfillPersonalProjects, migrateToPMTheory
+                         serialScheduler.js, crashing.js, scheduleTasks.js (chuẩn bị đầu vào) + unit test
+    utils/               audit (writeAudit), access (phân quyền task), regex (escape tìm kiếm),
+                         taskLifecycle (xóa/khôi phục task kèm subtask, liên kết, chấm công),
+                         taskFields (kiểm tra dữ liệu task), taskRules (assignee, cha/con, phụ thuộc),
+                         taskResponse (định dạng task trả về)
+  scripts/               makeAdmin, backfillPersonalProjects, migrateSchema
 frontend/
   src/
-    pages/               Projects, ProjectDetail (Board|List|Timeline|Dashboard|Settings),
+    pages/               Projects, ProjectDetail (Board|List|Timeline|Dashboard|Log|Settings),
                          ProjectOptimize, MyTime, Reports, Login, Register
-    components/          KanbanBoard, ProjectGantt, ResourceCurve, ProjectDashboard, ...
+    components/          KanbanBoard, ProjectGantt, ResourceCurve, ProjectDashboard, ThemeButton,
+                         LogoutButton, ...
+    components/project/  từng tab của ProjectDetail (TaskListTab, TimelineTab, ProjectLogTab,
+                         ProjectSettingsTab) và TaskModal
     services/            các wrapper Axios (api.js với JWT interceptor)
-    hooks/               useTheme, useSchedule
+    hooks/               useTheme, useSchedule, useTaskEditor (trạng thái form task)
 ```
 
 ## Cài đặt và chạy
@@ -70,13 +78,17 @@ cd backend
 npm install
 ```
 
-Tạo file `backend/.env`:
+Sao chép `backend/.env.example` thành `backend/.env` rồi điền giá trị:
 
 ```
 MONGO_URI=mongodb+srv://<user>:<pass>@<cluster>/<db>
 JWT_SECRET=<your_secret>
 PORT=5000
+CORS_ORIGIN=http://localhost:5173
+TRUST_PROXY=
 ```
+
+Server sẽ dừng ngay nếu thiếu `MONGO_URI`, `JWT_SECRET` hoặc không kết nối được MongoDB. `CORS_ORIGIN` là danh sách URL frontend được phép gọi API (phân tách bằng dấu phẩy); khi để trống ở môi trường dev, mặc định cho phép `http://localhost:5173` và `http://localhost:4173`.
 
 Chạy:
 
@@ -92,7 +104,7 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-API base URL mặc định là `http://localhost:5000/api`; đổi bằng biến `VITE_API_URL` trong `frontend/.env` khi cần.
+API base URL mặc định là `http://localhost:5000/api`; khi cần đổi, sao chép `frontend/.env.example` thành `frontend/.env` và sửa `VITE_API_URL`.
 
 ## Kiểm thử
 
@@ -106,6 +118,15 @@ npm test
 - `scheduler.test.js` - mạng CPM 8 công việc với đáp án biết trước (thời gian dự án 17, đường găng A→B→D→G→H, toàn bộ slack)
 - `serialScheduler.test.js` - lịch ràng buộc nhân lực dưới giới hạn (11 → 15 đơn vị, trễ 4)
 - `crashing.test.js` - bảng tổng hợp crashing và phương án tối ưu trên mạng có hai đường găng
+- `scheduleTasks.test.js` - task cha bao trọn các subtask (không cộng thời lượng riêng), task bị hủy không chiếm thời gian hay nhân lực
+
+Kiểm thử API (phân quyền, xóa/khôi phục, lưu trữ dự án, lập lịch) chạy trên MongoDB trong bộ nhớ, không đụng tới dữ liệu thật:
+
+```bash
+cd backend
+npm run test:api   # lần đầu tải MongoDB server (~630 MB) vào ~/.cache/mongodb-binaries
+```
+- `access.test.js` - quy tắc phân quyền task theo vai trò trong dự án và escape từ khóa tìm kiếm
 
 ## Script tiện ích
 
@@ -113,8 +134,8 @@ Tất cả script mặc định chạy dry-run; thêm `--apply` để ghi thật
 
 ```bash
 node scripts/makeAdmin.js <email>            # cấp quyền admin
-node scripts/backfillPersonalProjects.js     # tạo dự án Personal cho user cũ
-node scripts/migrateToPMTheory.js            # backfill duration/timeUnit/actualStart-End
+node scripts/backfillPersonalProjects.js     # gán task chưa có dự án vào dự án Personal (user tự có dự án Personal khi đăng ký/đăng nhập)
+node scripts/migrateSchema.js                # backfill duration/timeUnit/actualStart-End (= npm run migrate)
 ```
 
 ## Các API endpoint chính
@@ -135,4 +156,9 @@ Lỗi nghiệp vụ (chu trình phụ thuộc, thiếu cấu hình lập lịch)
 ## Triển khai
 
 - **Frontend**: `npm run build`, deploy thư mục `dist/` bằng Firebase Hosting (`firebase.json` rewrite mọi route về `/index.html` cho SPA).
-- **Backend**: build Docker image từ `backend/Dockerfile`; cấu hình `MONGO_URI`, `JWT_SECRET`, `PORT` qua biến môi trường (Render/Railway/VPS).
+- **Backend**: build Docker image từ `backend/Dockerfile` (chạy `server.js`, cổng 5000); cấu hình `MONGO_URI`, `JWT_SECRET`, `PORT` qua biến môi trường (Render/Railway/VPS). Ở production bắt buộc có `CORS_ORIGIN` (URL frontend đã deploy); nếu chạy sau proxy (Render, Railway) đặt `TRUST_PROXY=1` để giới hạn đăng nhập tính đúng IP người dùng:
+
+```bash
+docker build -t project-manager-api backend
+docker run -p 5000:5000 --env-file backend/.env project-manager-api
+```

@@ -12,12 +12,13 @@ import {
   addDependency,
   removeDependency,
 } from '../services/noteService';
+import { useI18n } from '../i18n';
 import './TaskRelationsSection.css';
 
-function statusLabel(s) {
-  if (s === 'done') return 'Done';
-  if (s === 'cancelled') return 'Cancelled';
-  return 'In progress';
+function getStatusKey(status) {
+  if (status === 'done') return 'rel.status.done';
+  if (status === 'cancelled') return 'rel.status.cancelled';
+  return 'rel.status.open';
 }
 
 export default function TaskRelationsSection({
@@ -28,6 +29,7 @@ export default function TaskRelationsSection({
   onEditTask,
   onChange,
 }) {
+  const { t } = useI18n();
   const isParent = !parentTaskId; // only top-level tasks may have subtasks
   const showDeps = !!projectId; // deps only for project tasks
 
@@ -55,7 +57,7 @@ export default function TaskRelationsSection({
         const data = await getSubtasks(taskId);
         setSubtasks(Array.isArray(data?.subtasks) ? data.subtasks : []);
       } catch (err) {
-        toast.error(err.message || 'Failed to load subtasks');
+        toast.error(err.message || t('rel.loadSubtasksFailed'));
       } finally {
         setSubLoading(false);
       }
@@ -71,12 +73,12 @@ export default function TaskRelationsSection({
         setBlockedBy(Array.isArray(bData?.dependencies) ? bData.dependencies : []);
         setBlocks(Array.isArray(blData?.blocks) ? blData.blocks : []);
       } catch (err) {
-        toast.error(err.message || 'Failed to load dependencies');
+        toast.error(err.message || t('rel.loadDependenciesFailed'));
       } finally {
         setDepLoading(false);
       }
     }
-  }, [taskId, isParent, showDeps]);
+  }, [taskId, isParent, showDeps, t]);
 
   useEffect(() => {
     refresh();
@@ -89,7 +91,7 @@ export default function TaskRelationsSection({
     const title = newSubTitle.trim();
     const content = newSubContent.trim() || title;
     if (!title) {
-      toast.error('Subtask title is required');
+      toast.error(t('rel.subtaskTitleRequired'));
       return;
     }
     setCreatingSub(true);
@@ -98,16 +100,14 @@ export default function TaskRelationsSection({
         title,
         content,
         project: projectId || null,
-        priority: 0,
-        category: 'Other',
       });
       setNewSubTitle('');
       setNewSubContent('');
-      toast.success('Subtask added');
+      toast.success(t('rel.subtaskAdded'));
       await refresh();
       onChange?.();
     } catch (err) {
-      toast.error(err.message || 'Failed to add subtask');
+      toast.error(err.message || t('rel.addSubtaskFailed'));
     } finally {
       setCreatingSub(false);
     }
@@ -123,18 +123,18 @@ export default function TaskRelationsSection({
       await refresh();
       onChange?.();
     } catch (err) {
-      toast.error(err.message || 'Failed to update');
+      toast.error(err.message || t('rel.updateFailed'));
     }
   };
 
   const handleRemoveSubtask = async (sub) => {
-    if (!window.confirm('Move this subtask to trash?')) return;
+    if (!window.confirm(t('rel.trashSubtaskConfirm'))) return;
     try {
       await deleteNote(sub._id || sub.id);
       await refresh();
       onChange?.();
     } catch (err) {
-      toast.error(err.message || 'Failed to remove');
+      toast.error(err.message || t('rel.removeFailed'));
     }
   };
 
@@ -154,7 +154,7 @@ export default function TaskRelationsSection({
       });
       setPickerOptions(filtered);
     } catch (err) {
-      toast.error(err.message || 'Failed to load tasks');
+      toast.error(err.message || t('rel.loadTasksFailed'));
       setPickerOptions([]);
     } finally {
       setPickerLoading(false);
@@ -165,23 +165,23 @@ export default function TaskRelationsSection({
     const depId = String(depTask._id || depTask.id);
     try {
       await addDependency(taskId, depId);
-      toast.success('Dependency added');
+      toast.success(t('rel.dependencyAdded'));
       setShowPicker(false);
       await refresh();
       onChange?.();
     } catch (err) {
-      toast.error(err.message || 'Failed to add dependency');
+      toast.error(err.message || t('rel.addDependencyFailed'));
     }
   };
 
   const handleRemoveDependency = async (depId) => {
     try {
       await removeDependency(taskId, depId);
-      toast.success('Dependency removed');
+      toast.success(t('rel.dependencyRemoved'));
       await refresh();
       onChange?.();
     } catch (err) {
-      toast.error(err.message || 'Failed to remove dependency');
+      toast.error(err.message || t('rel.removeDependencyFailed'));
     }
   };
 
@@ -206,7 +206,7 @@ export default function TaskRelationsSection({
       {isParent ? (
         <section className="relations-block">
           <div className="relations-header">
-            <h4>Subtasks{subtaskStats.total ? ` (${subtaskStats.done}/${subtaskStats.total})` : ''}</h4>
+            <h4>{t('rel.subtasks')}{subtaskStats.total ? ` (${subtaskStats.done}/${subtaskStats.total})` : ''}</h4>
             {subLoading ? <Loader size={14} className="spin" /> : null}
           </div>
 
@@ -214,7 +214,7 @@ export default function TaskRelationsSection({
             <div className="subtask-add-row">
               <input
                 type="text"
-                placeholder="New subtask title…"
+                placeholder={t('rel.newSubtask')}
                 value={newSubTitle}
                 onChange={(e) => setNewSubTitle(e.target.value)}
                 onKeyDown={(e) => {
@@ -227,7 +227,7 @@ export default function TaskRelationsSection({
               />
               <input
                 type="text"
-                placeholder="Optional details"
+                placeholder={t('rel.subtaskDetails')}
                 value={newSubContent}
                 onChange={(e) => setNewSubContent(e.target.value)}
                 onKeyDown={(e) => {
@@ -245,13 +245,13 @@ export default function TaskRelationsSection({
                 onClick={handleAddSubtask}
               >
                 {creatingSub ? <Loader size={14} className="spin" /> : <Plus size={14} />}
-                <span>Add</span>
+                <span>{t('common.add')}</span>
               </button>
             </div>
           ) : null}
 
           {subtasks.length === 0 ? (
-            <div className="muted relations-empty">No subtasks yet.</div>
+            <div className="muted relations-empty">{t('rel.noSubtasks')}</div>
           ) : (
             <div className="subtask-list">
               {subtasks.map((sub) => {
@@ -264,23 +264,23 @@ export default function TaskRelationsSection({
                       checked={done}
                       onChange={() => canEdit && handleToggleSubtaskDone(sub)}
                       disabled={!canEdit}
-                      aria-label="Mark subtask done"
+                      aria-label={t('rel.markDone')}
                     />
                     <button
                       type="button"
                       className="subtask-link"
                       onClick={() => onEditTask?.(sub)}
-                      title="Open subtask"
+                      title={t('rel.openSubtask')}
                     >
-                      <span className="subtask-title">{sub.title || sub.content?.slice(0, 60) || '(untitled)'}</span>
+                      <span className="subtask-title">{sub.title || sub.content?.slice(0, 60) || t('common.untitled')}</span>
                       <span className="subtask-progress">{sub.progress || 0}%</span>
-                      <span className={`subtask-status status-${sub.status}`}>{statusLabel(sub.status)}</span>
+                      <span className={`subtask-status status-${sub.status}`}>{t(getStatusKey(sub.status))}</span>
                     </button>
                     {canEdit ? (
                       <button
                         type="button"
                         className="icon-btn danger"
-                        title="Trash subtask"
+                        title={t('rel.trashSubtask')}
                         onClick={() => handleRemoveSubtask(sub)}
                       >
                         <Trash2 size={14} />
@@ -293,18 +293,18 @@ export default function TaskRelationsSection({
           )}
         </section>
       ) : (
-        <div className="muted relations-note">This is a subtask. It cannot have its own subtasks.</div>
+        <div className="muted relations-note">{t('rel.isSubtask')}</div>
       )}
 
       {showDeps ? (
         <section className="relations-block">
           <div className="relations-header">
-            <h4>Blocked by{blockedBy.length ? ` (${blockedBy.length})` : ''}</h4>
+            <h4>{t('rel.blockedBy')}{blockedBy.length ? ` (${blockedBy.length})` : ''}</h4>
             {depLoading ? <Loader size={14} className="spin" /> : null}
           </div>
 
           {blockedBy.length === 0 ? (
-            <div className="muted relations-empty">No blockers.</div>
+            <div className="muted relations-empty">{t('rel.noBlockers')}</div>
           ) : (
             <div className="dep-list">
               {blockedBy.map((d) => {
@@ -313,15 +313,15 @@ export default function TaskRelationsSection({
                   <div className={`dep-row ${isOpen ? 'is-open' : 'is-resolved'}`} key={d.id}>
                     {isOpen ? <Lock size={14} /> : <Check size={14} />}
                     <div className="dep-main">
-                      <strong>{d.title || d.content?.slice(0, 60) || '(untitled)'}</strong>
-                      <span className={`dep-status status-${d.status}`}>{statusLabel(d.status)}</span>
+                      <strong>{d.title || d.content?.slice(0, 60) || t('common.untitled')}</strong>
+                      <span className={`dep-status status-${d.status}`}>{t(getStatusKey(d.status))}</span>
                     </div>
                     {canEdit ? (
                       <button
                         type="button"
                         className="icon-btn danger"
                         onClick={() => handleRemoveDependency(d.id)}
-                        title="Remove dependency"
+                        title={t('rel.removeDependency')}
                       >
                         <X size={14} />
                       </button>
@@ -335,7 +335,7 @@ export default function TaskRelationsSection({
           {canEdit ? (
             <button type="button" className="btn-secondary btn-add-dep" onClick={openPicker}>
               <Plus size={14} />
-              <span>Add blocker</span>
+              <span>{t('rel.addBlocker')}</span>
             </button>
           ) : null}
 
@@ -343,7 +343,7 @@ export default function TaskRelationsSection({
             <div className="dep-picker-overlay" onClick={() => setShowPicker(false)}>
               <div className="dep-picker" onClick={(e) => e.stopPropagation()}>
                 <div className="dep-picker-header">
-                  <strong>Pick a task this depends on</strong>
+                  <strong>{t('rel.pickBlocker')}</strong>
                   <button type="button" className="btn-close" onClick={() => setShowPicker(false)}>
                     <X size={18} />
                   </button>
@@ -351,16 +351,16 @@ export default function TaskRelationsSection({
                 <input
                   type="text"
                   className="dep-picker-search"
-                  placeholder="Search by title or content…"
+                  placeholder={t('rel.searchTasks')}
                   value={pickerQuery}
                   onChange={(e) => setPickerQuery(e.target.value)}
                   autoFocus
                 />
                 <div className="dep-picker-list">
                   {pickerLoading ? (
-                    <div className="muted">Loading…</div>
+                    <div className="muted">{t('common.loading')}</div>
                   ) : filteredOptions.length === 0 ? (
-                    <div className="muted">No tasks available.</div>
+                    <div className="muted">{t('rel.noTasks')}</div>
                   ) : (
                     filteredOptions.map((opt) => (
                       <button
@@ -369,8 +369,8 @@ export default function TaskRelationsSection({
                         key={String(opt._id || opt.id)}
                         onClick={() => handleAddDependency(opt)}
                       >
-                        <span className="dep-picker-title">{opt.title || opt.content?.slice(0, 60) || '(untitled)'}</span>
-                        <span className={`dep-status status-${opt.status}`}>{statusLabel(opt.status)}</span>
+                        <span className="dep-picker-title">{opt.title || opt.content?.slice(0, 60) || t('common.untitled')}</span>
+                        <span className={`dep-status status-${opt.status}`}>{t(getStatusKey(opt.status))}</span>
                       </button>
                     ))
                   )}
@@ -389,15 +389,15 @@ export default function TaskRelationsSection({
             onClick={() => setShowBlocksList((v) => !v)}
           >
             {showBlocksList ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            <span>Blocks {blocks.length} task{blocks.length === 1 ? '' : 's'}</span>
+            <span>{blocks.length === 1 ? t('rel.blocksOne') : t('rel.blocksMany', { n: blocks.length })}</span>
           </button>
           {showBlocksList ? (
             <div className="dep-list">
               {blocks.map((b) => (
                 <div className="dep-row" key={b.id}>
                   <div className="dep-main">
-                    <strong>{b.title || b.content?.slice(0, 60) || '(untitled)'}</strong>
-                    <span className={`dep-status status-${b.status}`}>{statusLabel(b.status)}</span>
+                    <strong>{b.title || b.content?.slice(0, 60) || t('common.untitled')}</strong>
+                    <span className={`dep-status status-${b.status}`}>{t(getStatusKey(b.status))}</span>
                   </div>
                 </div>
               ))}

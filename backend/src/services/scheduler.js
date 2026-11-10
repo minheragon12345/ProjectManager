@@ -56,6 +56,12 @@ function topologicalSort(graph) {
   return out;
 }
 
+// Durations carry decimals, so every sum is rounded: otherwise 0.1 + 0.2 never equals 0.3
+// and slack comes out as 1e-17 instead of 0.
+function roundTime(value) {
+  return Math.round(value * 1e6) / 1e6;
+}
+
 function forwardPass(graph) {
   const order = topologicalSort(graph);
   const ES = new Map();
@@ -64,7 +70,7 @@ function forwardPass(graph) {
     const preds = graph.predecessors.get(id);
     const es = preds.length === 0 ? 0 : Math.max(...preds.map((p) => EF.get(p)));
     ES.set(id, es);
-    EF.set(id, es + graph.durations.get(id));
+    EF.set(id, roundTime(es + graph.durations.get(id)));
   }
   return { ES, EF, order };
 }
@@ -77,7 +83,7 @@ function backwardPass(graph, projectDuration, forwardOrder) {
     const succs = graph.successors.get(id);
     const lf = succs.length === 0 ? projectDuration : Math.min(...succs.map((s) => LS.get(s)));
     LF.set(id, lf);
-    LS.set(id, lf - graph.durations.get(id));
+    LS.set(id, roundTime(lf - graph.durations.get(id)));
   }
   return { LS, LF };
 }
@@ -87,7 +93,7 @@ function computeSlacks(graph, forward, backward) {
   const { LS, LF } = backward;
   const result = new Map();
   for (const id of graph.nodes) {
-    const totalSlack = LS.get(id) - ES.get(id);
+    const totalSlack = roundTime(LS.get(id) - ES.get(id));
     const succs = graph.successors.get(id);
     let freeSlack;
     if (succs.length === 0) {
@@ -95,7 +101,7 @@ function computeSlacks(graph, forward, backward) {
       // beyond ES still has to fit before the project ends.
       freeSlack = totalSlack;
     } else {
-      freeSlack = Math.min(...succs.map((s) => ES.get(s) - EF.get(id)));
+      freeSlack = roundTime(Math.min(...succs.map((s) => ES.get(s) - EF.get(id))));
     }
     result.set(id, {
       ES: ES.get(id),
@@ -110,6 +116,14 @@ function computeSlacks(graph, forward, backward) {
   return result;
 }
 
+// Two critical tasks can be linked without the first one driving the second
+// (EF < ES), so a real critical path only follows edges where EF === ES.
+function isCriticalEdge(slacks, fromId, toId) {
+  const from = slacks.get(fromId);
+  const to = slacks.get(toId);
+  return !!from?.isCritical && !!to?.isCritical && from.EF === to.ES;
+}
+
 function findCriticalPath(graph, slacks) {
   // Walk from a critical task with no critical predecessor.
   // Tie-break: among critical successors, pick the one with greatest EF
@@ -120,7 +134,7 @@ function findCriticalPath(graph, slacks) {
   for (const id of graph.nodes) {
     if (!isCritical(id)) continue;
     const preds = graph.predecessors.get(id) || [];
-    if (preds.every((p) => !isCritical(p))) roots.push(id);
+    if (preds.every((p) => !isCriticalEdge(slacks, p, id))) roots.push(id);
   }
   if (roots.length === 0) return [];
 
@@ -131,7 +145,7 @@ function findCriticalPath(graph, slacks) {
     let current = root;
     const seen = new Set([current]);
     while (true) {
-      const succs = (graph.successors.get(current) || []).filter(isCritical);
+      const succs = (graph.successors.get(current) || []).filter((s) => isCriticalEdge(slacks, current, s));
       if (succs.length === 0) break;
       // Among critical successors, prefer one whose EF is largest (deepest chain).
       let next = succs[0];
@@ -169,8 +183,9 @@ function computeSchedule(tasks) {
 
 /*
   Resource loading curve — sums peopleRequired of all tasks active at each
-  integer time step in [0, projectDuration]. Pure function over scheduleTasks
-  (the array returned by the schedule endpoint or computed locally).
+  whole time step in [0, projectDuration] and at every task start and end.
+  Pure function over scheduleTasks (the array returned by the schedule
+  endpoint or computed locally). Each point holds until the next one.
 
   Input:
     scheduleTasks: [{ id, ES, duration, peopleRequired }]
@@ -185,17 +200,27 @@ function computeResourceCurve(scheduleTasks, projectDuration) {
     return { peak: 0, points: [{ t: 0, demand: 0 }] };
   }
 
+  // Demand only changes when a task starts or ends, so sample those moments as well as
+  // every whole step. Whole steps alone miss tasks such as one running from 0.2 to 0.7.
+  const active = scheduleTasks
+    .map((task) => {
+      const start = Number(task.ES) || 0;
+      return { start, end: roundTime(start + (Number(task.duration) || 0)), people: Number(task.peopleRequired) || 0 };
+    })
+    .filter((task) => task.end > task.start);
+  const times = new Set();
+  for (let t = 0; t <= D; t += 1) times.add(t);
+  for (const task of active) {
+    times.add(task.start);
+    times.add(task.end);
+  }
+
   let peak = 0;
-  for (let t = 0; t <= D; t += 1) {
+  for (const t of [...times].sort((a, b) => a - b)) {
     let demand = 0;
-    for (const task of scheduleTasks) {
-      const es = Number(task.ES) || 0;
-      const dur = Number(task.duration) || 0;
-      const r = Number(task.peopleRequired) || 0;
-      if (dur <= 0) continue;
-      const ef = es + dur;
-      // Task active during half-open interval [es, ef).
-      if (t >= es && t < ef) demand += r;
+    // Task active during half-open interval [start, end).
+    for (const task of active) {
+      if (t >= task.start && t < task.end) demand += task.people;
     }
     if (demand > peak) peak = demand;
     points.push({ t, demand });
@@ -205,6 +230,8 @@ function computeResourceCurve(scheduleTasks, projectDuration) {
 }
 
 module.exports = {
+  roundTime,
+  isCriticalEdge,
   buildGraph,
   topologicalSort,
   forwardPass,

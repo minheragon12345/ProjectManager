@@ -3,10 +3,12 @@ import en from './en';
 import vi from './vi';
 
 const DICTS = { en, vi };
+const LOCALES = { en: 'en-US', vi: 'vi-VN' };
 const STORAGE_KEY = 'pm-lang';
 
 const Ctx = createContext({
   lang: 'en',
+  locale: 'en-US',
   setLang: () => {},
   t: (k) => k,
 });
@@ -63,7 +65,7 @@ export function LanguageProvider({ children }) {
     [lang],
   );
 
-  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
+  const value = useMemo(() => ({ lang, locale: LOCALES[lang] || 'en-US', setLang, t }), [lang, setLang, t]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

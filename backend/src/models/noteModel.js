@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const NOTE_STATUSES = ['not_done', 'done', 'cancelled'];
-const NOTE_CATEGORIES = ['Study', 'Health', 'Finance', 'Work', 'Personal', 'Other'];
 
 const NoteSchema = new mongoose.Schema(
   {
@@ -114,24 +113,9 @@ const NoteSchema = new mongoose.Schema(
       index: true,
     },
 
-    category: {
-      type: String,
-      enum: NOTE_CATEGORIES,
-      default: 'Other',
-      index: true,
-    },
-
     deadline: {
       type: Date,
       default: null,
-      index: true,
-    },
-
-    priority: {
-      type: Number,
-      min: 0,
-      max: 1024,
-      default: 0,
       index: true,
     },
 
@@ -158,9 +142,8 @@ const NoteSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-NoteSchema.index({ user: 1, isDeleted: 1, priority: -1, updatedAt: -1 });
-NoteSchema.index({ user: 1, category: 1, isDeleted: 1, updatedAt: -1 });
-NoteSchema.index({ project: 1, isDeleted: 1, status: 1, priority: -1 });
+NoteSchema.index({ user: 1, isDeleted: 1, updatedAt: -1 });
+NoteSchema.index({ project: 1, isDeleted: 1, status: 1 });
 NoteSchema.index({ assignees: 1, isDeleted: 1, status: 1 });
 NoteSchema.index({ parentTask: 1, isDeleted: 1 });
 NoteSchema.index({ dependencies: 1, isDeleted: 1 });
@@ -168,4 +151,3 @@ NoteSchema.index({ dependencies: 1, isDeleted: 1 });
 const Note = mongoose.model('Note', NoteSchema);
 module.exports = Note;
 module.exports.NOTE_STATUSES = NOTE_STATUSES;
-module.exports.NOTE_CATEGORIES = NOTE_CATEGORIES;
