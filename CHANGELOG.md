@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Billing rates page for system admins (`/admin/billing`, linked from the Projects page). Set each person's hourly rate and currency; project budgets and reports use them to turn logged hours into cost.
 - `backend/.env.example` and `frontend/.env.example` list the settings each app needs.
 - `backend/.dockerignore` keeps local `node_modules` and `.env` out of the Docker image.
 - `CORS_ORIGIN` setting lists the frontend URLs allowed to call the API, and `TRUST_PROXY` tells the API how many proxies sit in front of it.

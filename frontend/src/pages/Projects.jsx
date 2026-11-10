@@ -12,6 +12,7 @@ import {
   FolderKanban,
   Users,
   X,
+  BadgeDollarSign,
 } from 'lucide-react';
 import {
   getProjects,
@@ -206,6 +207,16 @@ const Projects = () => {
           >
             <FileText size={20} /> {t('projects.reports')}
           </button>
+
+          {user?.role === 'admin' ? (
+            <button
+              className="btn-admin nav-btn"
+              onClick={() => navigate('/admin/billing')}
+              title={t('projects.billing')}
+            >
+              <BadgeDollarSign size={20} /> {t('projects.billing')}
+            </button>
+          ) : null}
 
           <div className="filter-group">
             <select value={scope} onChange={(e) => setScope(e.target.value)}>

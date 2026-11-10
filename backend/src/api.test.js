@@ -265,6 +265,26 @@ test('admin edits follow the same parent and subtask rules', async () => {
   await as('owner').patch(`/notes/${child}/status`).send({ status: 'chưa xong' }).expect(400);
 });
 
+test('admins set billing rates and project budgets use them', async () => {
+  const project = await createProject('Billing');
+  const task = await createTask('owner', project);
+  await as('editor').post('/time-entries').send({ task, hours: 2, date: '2026-11-01' }).expect(201);
+
+  await as('editor').patch(`/admin/users/${users.editor.id}/billing-rate`).send({ billingRate: 50 }).expect(403);
+  await as('admin').patch(`/admin/users/${users.editor.id}/billing-rate`).send({ billingRate: -1 }).expect(400);
+  await as('admin').patch(`/admin/users/${users.editor.id}/billing-rate`).send({ billingCurrency: '' }).expect(400);
+  const updated = await as('admin').patch(`/admin/users/${users.editor.id}/billing-rate`).send({ billingRate: 40, billingCurrency: 'usd' }).expect(200);
+  assert.strictEqual(updated.body.user.billingCurrency, 'USD');
+  assert.strictEqual(updated.body.user.password, undefined);
+
+  const listed = await as('admin').get('/admin/users?search=editor').expect(200);
+  assert.strictEqual(listed.body.users[0].billingRate, 40);
+  await as('owner').get('/admin/users').expect(403);
+
+  const budget = await as('owner').get(`/projects/${project}/budget-summary`).expect(200);
+  assert.strictEqual(budget.body.actual.cost, 80);
+});
+
 test('schedule spans parents over their subtasks and skips cancelled tasks', async () => {
   const project = await createProject('Plan', { maxHeadcount: 2 });
   const design = await createTask('owner', project, { title: 'Design', duration: 3 });

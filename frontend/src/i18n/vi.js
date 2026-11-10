@@ -470,4 +470,17 @@ export default {
   'gantt.barPosition': 'Vị trí thanh',
   'gantt.granularity': 'Độ chi tiết',
   'gantt.resourceMode': 'Chế độ nhân lực',
+
+  // ----- admin billing rates
+  'projects.billing': 'Đơn giá',
+  'billing.heading': 'Đơn giá nhân công',
+  'billing.sub': 'Đơn giá theo giờ của từng người. Ngân sách dự án và báo cáo dùng nó để quy đổi giờ công thành chi phí.',
+  'billing.search': 'Tìm theo tên hoặc email…',
+  'billing.col.user': 'Người dùng',
+  'billing.col.role': 'Vai trò hệ thống',
+  'billing.col.rate': 'Đơn giá / giờ',
+  'billing.col.currency': 'Tiền tệ',
+  'billing.saved': 'Đã lưu đơn giá cho {name}',
+  'billing.empty': 'Không tìm thấy người dùng.',
+  'billing.adminOnly': 'Chỉ quản trị viên hệ thống mới quản lý được đơn giá.',
 };

@@ -1,0 +1,203 @@
+.billing-container {
+  --bg-main: #f9fafb;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #9ca3af;
+  --surface-primary: #ffffff;
+  --surface-secondary: #f3f4f6;
+  --border-primary: #e5e7eb;
+  --border-secondary: #d1d5db;
+  --primary-accent: #4f46e5;
+
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.billing-container.dark-theme {
+  --bg-main: #111827;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --text-tertiary: #6b7280;
+  --surface-primary: #1f2937;
+  --surface-secondary: #374151;
+  --border-primary: #374151;
+  --border-secondary: #4b5563;
+  --primary-accent: #6366f1;
+}
+
+.billing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.billing-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.billing-title h2 {
+  margin: 0;
+}
+
+.billing-title p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  max-width: 520px;
+}
+
+.billing-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.billing-container .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-secondary);
+  background-color: var(--surface-primary);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.billing-container .btn:hover:not(:disabled) {
+  background-color: var(--surface-secondary);
+}
+
+.billing-container .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.billing-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin-bottom: 1rem;
+  color: var(--text-tertiary);
+}
+
+.billing-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.billing-table-wrap {
+  overflow: auto;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+}
+
+.billing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.billing-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-tertiary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  background-color: var(--surface-secondary);
+}
+
+.billing-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  vertical-align: middle;
+}
+
+.billing-table tr:last-child td {
+  border-bottom: none;
+}
+
+.billing-email {
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.billing-role {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: var(--surface-secondary);
+  color: var(--text-secondary);
+}
+
+.billing-role.role-admin {
+  background-color: rgba(79, 70, 229, 0.12);
+  color: var(--primary-accent);
+}
+
+.billing-input {
+  width: 110px;
+  background-color: var(--surface-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-secondary);
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.billing-input:focus {
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.billing-currency {
+  width: 80px;
+  text-transform: uppercase;
+}
+
+.billing-empty {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 1.5rem;
+}
+
+.billing-empty-state {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-tertiary);
+  background-color: var(--surface-primary);
+  border: 1px dashed var(--border-secondary);
+  border-radius: 12px;
+}
+
+@media (max-width: 600px) {
+  .billing-container {
+    padding: 16px;
+  }
+}

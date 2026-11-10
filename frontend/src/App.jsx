@@ -10,6 +10,7 @@ import ProjectDetail from './pages/ProjectDetail';
 import ProjectOptimize from './pages/ProjectOptimize';
 import MyTime from './pages/MyTime';
 import Reports from './pages/Reports';
+import AdminBilling from './pages/AdminBilling';
 import { me } from './services/authService';
 import { LanguageProvider } from './i18n';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -91,6 +92,10 @@ function App() {
         <Route
           path="/reports"
           element={isAuthenticated ? guard(<Reports />) : <Navigate to="/login" />}
+        />
+        <Route
+          path="/admin/billing"
+          element={isAuthenticated ? guard(<AdminBilling />) : <Navigate to="/login" />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -14,7 +14,7 @@
 
 **Thời gian & ngân sách**
 - Chấm công theo giờ (time entry) với timesheet cá nhân theo tuần
-- Đơn giá nhân công từng người; dashboard ngân sách với chi phí kế hoạch/thực tế
+- Đơn giá nhân công từng người, admin chỉnh tại trang `/admin/billing`; dashboard ngân sách với chi phí kế hoạch/thực tế
 - Báo cáo liên dự án, xuất CSV
 
 **Lập lịch & tối ưu (lý thuyết QLDA)**
@@ -57,7 +57,7 @@ backend/
 frontend/
   src/
     pages/               Projects, ProjectDetail (Board|List|Timeline|Dashboard|Log|Settings),
-                         ProjectOptimize, MyTime, Reports, Login, Register
+                         ProjectOptimize, MyTime, Reports, AdminBilling, Login, Register
     components/          KanbanBoard, ProjectGantt, ResourceCurve, ProjectDashboard, ThemeButton,
                          LogoutButton, ...
     components/project/  từng tab của ProjectDetail (TaskListTab, TimelineTab, ProjectLogTab,

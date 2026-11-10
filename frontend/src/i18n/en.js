@@ -469,4 +469,17 @@ export default {
   'gantt.barPosition': 'Bar position',
   'gantt.granularity': 'View granularity',
   'gantt.resourceMode': 'Resource mode',
+
+  // ----- admin billing rates
+  'projects.billing': 'Billing rates',
+  'billing.heading': 'Billing rates',
+  'billing.sub': 'Hourly rate for each person. Project budgets and reports use it to turn logged hours into cost.',
+  'billing.search': 'Search by name or email…',
+  'billing.col.user': 'User',
+  'billing.col.role': 'System role',
+  'billing.col.rate': 'Rate per hour',
+  'billing.col.currency': 'Currency',
+  'billing.saved': 'Billing rate saved for {name}',
+  'billing.empty': 'No users found.',
+  'billing.adminOnly': 'Only system admins can manage billing rates.',
 };
