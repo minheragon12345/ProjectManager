@@ -7,6 +7,7 @@ const AuditLog = require('../models/auditLogModel');
 const auth = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 const { writeAudit } = require('../utils/audit');
+const { escapeRegex } = require('../utils/regex');
 
 const router = express.Router();
 
@@ -72,7 +73,7 @@ router.get('/users', requireRole('admin'), async (req, res) => {
     const { search } = req.query;
     const query = {};
     if (search && String(search).trim()) {
-      const keyword = String(search).trim();
+      const keyword = escapeRegex(String(search).trim());
       query.$or = [
         { username: { $regex: keyword, $options: 'i' } },
         { email: { $regex: keyword, $options: 'i' } },
@@ -262,9 +263,9 @@ router.get('/notes', requireRole('admin', 'moderator'), async (req, res) => {
     }
 
     if (search && String(search).trim()) {
-      const keyword = String(search).trim();
+      const keyword = escapeRegex(String(search).trim());
       query.$or = [
-        { title: { $regex: keyword, $options: 'i' } },
+        { title:{ $regex: keyword, $options: 'i' } },
         { content: { $regex: keyword, $options: 'i' } },
         { category: { $regex: keyword, $options: 'i' } },
       ];

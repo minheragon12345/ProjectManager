@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getProjectSchedule } from '../services/projectService';
 
 /**
@@ -15,18 +15,26 @@ export function useSchedule(projectId, { auto = true, constrained = false } = {}
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Only the newest request may write state, so a slow unlimited response
+  // can't overwrite a constrained one that was asked for later.
+  const latestRequest = useRef(0);
+
   const refresh = useCallback(async () => {
     if (!projectId) return;
+    const request = latestRequest.current + 1;
+    latestRequest.current = request;
     setLoading(true);
     setError(null);
     try {
       const data = await getProjectSchedule(projectId, { constrained });
+      if (latestRequest.current !== request) return;
       setSchedule(data);
     } catch (err) {
+      if (latestRequest.current !== request) return;
       setError(err.message || 'Failed to load schedule');
       setSchedule(null);
     } finally {
-      setLoading(false);
+      if (latestRequest.current === request) setLoading(false);
     }
   }, [projectId, constrained]);
 

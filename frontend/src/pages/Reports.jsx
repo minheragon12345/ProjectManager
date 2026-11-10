@@ -12,18 +12,13 @@ import {
   Sun,
   LogOut,
 } from 'lucide-react';
-import { getProjects, getProject } from '../services/projectService';
+import { getProjects, getBudgetSummary } from '../services/projectService';
 import { listTimeEntries } from '../services/timeEntryService';
 import { useTheme } from '../hooks/useTheme';
 import { useI18n } from '../i18n';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { getLocalDateString } from '../utils/date';
 import './Reports.css';
-
-function toISODate(d) {
-  const x = new Date(d);
-  if (Number.isNaN(x.getTime())) return '';
-  return x.toISOString().slice(0, 10);
-}
 
 function startOfMonth(d = new Date()) {
   const x = new Date(d);
@@ -66,11 +61,11 @@ const Reports = () => {
 
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
-  const [from, setFrom] = useState(() => toISODate(startOfMonth()));
-  const [to, setTo] = useState(() => toISODate(new Date()));
+  const [from, setFrom] = useState(() => getLocalDateString(startOfMonth()));
+  const [to, setTo] = useState(() => getLocalDateString(new Date()));
 
   const [entries, setEntries] = useState([]);
-  const [project, setProject] = useState(null);
+  const [budget, setBudget] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -99,12 +94,14 @@ const Reports = () => {
       const params = { project: projectId, limit: 10000 };
       if (from) params.from = from;
       if (to) params.to = to + 'T23:59:59.999Z';
-      const [entriesData, projectData] = await Promise.all([
+      // Billing rates come from the budget summary: the project payload has no rates,
+      // and the summary also covers contributors who have left the project.
+      const [entriesData, budgetData] = await Promise.all([
         listTimeEntries(params),
-        getProject(projectId),
+        getBudgetSummary(projectId),
       ]);
       setEntries(Array.isArray(entriesData?.entries) ? entriesData.entries : []);
-      setProject(projectData?.project || null);
+      setBudget(budgetData || null);
     } catch (err) {
       toast.error(err.message || 'Could not load report data');
     } finally {
@@ -118,25 +115,17 @@ const Reports = () => {
 
   const rateMap = useMemo(() => {
     const map = new Map();
-    if (!project) return map;
-    if (project.owner?.id) {
-      map.set(project.owner.id, {
-        rate: Number(project.owner.billingRate) || 0,
-        currency: project.owner.billingCurrency || 'USD',
+    for (const row of budget?.byUser || []) {
+      if (!row.user?.id) continue;
+      map.set(row.user.id, {
+        rate: Number(row.billingRate) || 0,
+        currency: row.billingCurrency || 'USD',
       });
     }
-    for (const m of project.members || []) {
-      if (m.user?.id) {
-        map.set(m.user.id, {
-          rate: Number(m.user.billingRate) || 0,
-          currency: m.user.billingCurrency || 'USD',
-        });
-      }
-    }
     return map;
-  }, [project]);
+  }, [budget]);
 
-  const projectCurrency = project?.budget?.currency || 'USD';
+  const projectCurrency = budget?.planned?.currency || 'USD';
 
   const hoursByUser = useMemo(() => {
     const map = new Map();

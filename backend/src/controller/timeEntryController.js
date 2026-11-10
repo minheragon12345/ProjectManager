@@ -5,54 +5,13 @@ const Note = require('../models/noteModel');
 const Project = require('../models/projectModel');
 const auth = require('../middleware/authMiddleware');
 const { writeAudit } = require('../utils/audit');
+const { getProjectRole, canReadTask, canWriteTask } = require('../utils/access');
 
 const router = express.Router();
 router.use(auth);
 
 function isValidObjectId(id) {
   return mongoose.Types.ObjectId.isValid(id);
-}
-
-function getProjectAccess(project, userId) {
-  if (!project) return null;
-  if (project.isDeleted) return null;
-  const uid = String(userId || '');
-  if (!uid) return null;
-  const ownerId = String(project.owner?._id || project.owner || '');
-  if (ownerId === uid) return 'owner';
-  const hit = Array.isArray(project.members)
-    ? project.members.find((m) => String(m?.user?._id || m?.user) === uid)
-    : null;
-  return hit?.role || null;
-}
-
-// Returns 'owner' | 'write' | 'comment' | 'read' | null for the requesting user
-// against a populated note (must be populated with project: members + owner).
-function getNoteAccess(note, userId) {
-  const uid = String(userId || '');
-  if (!uid || !note) return null;
-  const ownerId = String(note.user?._id || note.user || '');
-  if (ownerId === uid) return 'owner';
-
-  const shareHit = (note.sharedWith || []).find(
-    (s) => String(s?.user?._id || s?.user) === uid,
-  );
-  if (shareHit?.permission) return shareHit.permission;
-
-  const projAccess = getProjectAccess(note.project, userId);
-  if (projAccess === 'owner' || projAccess === 'editor') return 'write';
-  if (projAccess === 'viewer') return 'read';
-
-  return null;
-}
-
-function canReadNote(note, userId) {
-  return !!getNoteAccess(note, userId);
-}
-
-function canWriteNote(note, userId) {
-  const access = getNoteAccess(note, userId);
-  return access === 'owner' || access === 'write';
 }
 
 function parseHours(value) {
@@ -144,7 +103,7 @@ router.post('/', async (req, res) => {
       .populate('project', 'owner members isDeleted');
 
     if (!note) return res.status(404).json({ message: 'Task not found' });
-    if (!canWriteNote(note, req.userId)) {
+    if (!canWriteTask(note, req.userId)) {
       return res.status(403).json({ message: 'You do not have permission to log time on this task.' });
     }
 
@@ -186,7 +145,7 @@ router.get('/', async (req, res) => {
       const note = await Note.findOne({ _id: taskId, isDeleted: false })
         .populate('project', 'owner members isDeleted');
       if (!note) return res.status(404).json({ message: 'Task not found' });
-      if (!canReadNote(note, uid)) return res.status(403).json({ message: 'Forbidden' });
+      if (!canReadTask(note, uid)) return res.status(403).json({ message: 'Forbidden' });
       and.push({ task: taskId });
     }
 
@@ -196,7 +155,7 @@ router.get('/', async (req, res) => {
         .select('owner members isDeleted')
         .lean();
       if (!project) return res.status(404).json({ message: 'Project not found' });
-      const role = getProjectAccess(project, uid);
+      const role = getProjectRole(project, uid);
       if (!role) return res.status(403).json({ message: 'Forbidden' });
       and.push({ project: projectId });
     }
@@ -277,7 +236,7 @@ router.get('/:id', async (req, res) => {
       .populate('user', 'username email')
       .populate({
         path: 'task',
-        select: 'title content user sharedWith project',
+        select: 'title content user assignees project',
         populate: { path: 'project', select: 'owner members isDeleted' },
       })
       .populate('project', 'name owner members isDeleted')
@@ -286,7 +245,7 @@ router.get('/:id', async (req, res) => {
     if (!entry) return res.status(404).json({ message: 'Time entry not found' });
 
     const isOwner = String(entry.user?._id || entry.user) === String(req.userId);
-    const canRead = isOwner || (entry.task && canReadNote(entry.task, req.userId));
+    const canRead = isOwner || (entry.task && canReadTask(entry.task, req.userId));
     if (!canRead) return res.status(403).json({ message: 'Forbidden' });
 
     return res.json({ entry: toEntryDto(entry) });
@@ -401,7 +360,7 @@ router.get('/summary/by-task', async (req, res) => {
       .select('owner members isDeleted')
       .lean();
     if (!project) return res.status(404).json({ message: 'Project not found' });
-    if (!getProjectAccess(project, req.userId)) {
+    if (!getProjectRole(project, req.userId)) {
       return res.status(403).json({ message: 'Forbidden' });
     }
 

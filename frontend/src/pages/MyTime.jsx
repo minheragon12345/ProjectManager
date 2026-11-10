@@ -18,6 +18,7 @@ import { listTimeEntries, deleteTimeEntry } from '../services/timeEntryService';
 import { useTheme } from '../hooks/useTheme';
 import { useI18n } from '../i18n';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { getEntryDateString, getLocalDateString } from '../utils/date';
 import './MyTime.css';
 
 function startOfWeek(date) {
@@ -34,10 +35,6 @@ function addDays(date, days) {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d;
-}
-
-function toISODate(d) {
-  return d.toISOString().slice(0, 10);
 }
 
 function formatRange(start) {
@@ -73,8 +70,8 @@ const MyTime = () => {
   const fetchWeek = useCallback(async () => {
     setLoading(true);
     try {
-      const from = toISODate(weekStart);
-      const to = toISODate(addDays(weekStart, 6));
+      const from = getLocalDateString(weekStart);
+      const to = getLocalDateString(addDays(weekStart, 6));
       const data = await listTimeEntries({
         from,
         to: to + 'T23:59:59.999Z',
@@ -102,8 +99,8 @@ const MyTime = () => {
     const out = [];
     for (let i = 0; i < 7; i++) {
       const date = addDays(weekStart, i);
-      const iso = toISODate(date);
-      const dayEntries = entries.filter((e) => toISODate(new Date(e.date)) === iso);
+      const iso = getLocalDateString(date);
+      const dayEntries = entries.filter((e) => getEntryDateString(e.date) === iso);
       const dayTotal = dayEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
       const billable = dayEntries.reduce((s, e) => s + (e.billable ? Number(e.hours) || 0 : 0), 0);
       out.push({ date, iso, entries: dayEntries, total: dayTotal, billable });

@@ -7,6 +7,8 @@ const TimeEntry = require('../models/timeEntryModel');
 const AuditLog = require('../models/auditLogModel');
 const auth = require('../middleware/authMiddleware');
 const { writeAudit } = require('../utils/audit');
+const { escapeRegex } = require('../utils/regex');
+const { getProjectRole } = require('../utils/access');
 const { computeSchedule, computeResourceCurve } = require('../services/scheduler');
 const { serialSchedule } = require('../services/serialScheduler');
 const { computeCrashingTable } = require('../services/crashing');
@@ -29,15 +31,7 @@ function ownerIdOf(project) {
 }
 
 function getMemberRole(project, userId) {
-  const uid = String(userId || '');
-  if (!uid) return null;
-  if (ownerIdOf(project) === uid) return 'owner';
-
-  const hit = Array.isArray(project?.members)
-    ? project.members.find((m) => String(m?.user?._id || m?.user) === uid)
-    : null;
-
-  return hit?.role || null;
+  return getProjectRole(project, userId);
 }
 
 function canRead(project, userId) {
@@ -298,7 +292,7 @@ router.get('/', async (req, res) => {
     }
 
     if (search && String(search).trim()) {
-      const keyword = String(search).trim();
+      const keyword = escapeRegex(String(search).trim());
       and.push({
         $or: [
           { name: { $regex: keyword, $options: 'i' } },
@@ -684,11 +678,16 @@ router.delete('/:id/members/:memberUserId', async (req, res) => {
 
     await project.save();
 
+    const unassigned = await Note.updateMany(
+      { project: project._id, assignees: memberUserId },
+      { $pull: { assignees: memberUserId } },
+    );
+
     await writeAudit(req, {
       action: 'PROJECT_MEMBER_REMOVE',
       targetType: 'PROJECT',
       targetId: String(project._id),
-      metadata: { memberUserId: String(memberUserId) },
+      metadata: { memberUserId: String(memberUserId), unassignedTasks: unassigned.modifiedCount || 0 },
     });
 
     return res.json({ message: 'Member removed' });

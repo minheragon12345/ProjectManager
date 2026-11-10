@@ -4,7 +4,7 @@
   "description": "", 
   "main": "server.js", 
   "scripts": { 
-    "test": "node src/services/scheduler.test.js && node src/services/serialScheduler.test.js && node src/services/crashing.test.js",
+    "test": "node src/services/scheduler.test.js && node src/services/serialScheduler.test.js && node src/services/crashing.test.js && node src/utils/access.test.js",
     "start": "node server.js",
     "make:admin": "node scripts/makeAdmin.js",
     "migrate": "node scripts/migrateSchema.js"

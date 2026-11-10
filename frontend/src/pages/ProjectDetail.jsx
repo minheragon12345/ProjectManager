@@ -338,13 +338,13 @@ const ProjectDetail = () => {
     try {
       const data = await getNotes('', 'all', { projectId: id });
       setTasks(Array.isArray(data?.notes) ? data.notes : []);
-      refreshSchedule?.();
+      refreshSchedule();
     } catch (err) {
       toast.error(err.message || 'Failed to load tasks');
     } finally {
       setTasksLoading(false);
     }
-  }, [id]);
+  }, [id, refreshSchedule]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -594,8 +594,12 @@ const ProjectDetail = () => {
       progress: typeof task.progress === 'number' ? task.progress : 0,
       category: task.category || 'Other',
       cancelled: task.status === 'cancelled',
+      // Drop people who left the project; the picker can't show them, and the
+      // backend rejects assignees who aren't members.
       assignees: Array.isArray(task.assignees)
-        ? task.assignees.map((a) => String(a?.id || a?._id || a)).filter(Boolean)
+        ? task.assignees
+            .map((a) => String(a?.id || a?._id || a))
+            .filter((assigneeId) => assigneeOptions.some((option) => option.id === assigneeId))
         : [],
       estimatedHours: typeof task.estimatedHours === 'number' ? task.estimatedHours : 0,
       duration: typeof task.duration === 'number' ? task.duration : 0,
@@ -632,6 +636,7 @@ const ProjectDetail = () => {
     };
     if (isAutoProgress) {
       if (taskForm.cancelled) payload.status = 'cancelled';
+      else if (editingTaskRef?.status === 'cancelled') payload.status = 'not_done';
     } else {
       payload.progress = progress;
       payload.status = taskForm.cancelled ? 'cancelled' : progress >= 100 ? 'done' : 'not_done';
@@ -725,16 +730,19 @@ const ProjectDetail = () => {
         return;
       }
     }
-    if ((task.subtaskStats?.total || 0) > 0 && (patch.status === 'done' || patch.status === 'not_done')) {
+    const isParentTask = (task.subtaskStats?.total || 0) > 0;
+    if (isParentTask && task.status !== 'cancelled' && (patch.status === 'done' || patch.status === 'not_done')) {
       toast.info('A parent task\'s status follows its subtasks. Move the subtasks instead.');
       return;
     }
+    // Reopening a cancelled parent: send only the status, its progress comes from the subtasks.
+    const body = isParentTask && patch.status !== 'cancelled' ? { status: 'not_done' } : patch;
     const previous = tasks;
     setTasks((prev) =>
-      prev.map((t) => ((t._id || t.id) === tid ? { ...t, ...patch } : t)),
+      prev.map((t) => ((t._id || t.id) === tid ? { ...t, ...body } : t)),
     );
     try {
-      await updateNote(tid, patch);
+      await updateNote(tid, body);
       fetchTasks();
     } catch (err) {
       setTasks(previous);

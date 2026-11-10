@@ -6,32 +6,29 @@ import {
   deleteTimeEntry,
   listTimeEntries,
 } from '../services/timeEntryService';
+import { getLocalDateString } from '../utils/date';
 import './TimeLogSection.css';
-
-function todayISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
-}
 
 function formatDate(value) {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('vi-VN');
+  return d.toLocaleDateString('vi-VN', { timeZone: 'UTC' });
 }
 
-const INITIAL_FORM = {
-  hours: '0.5',
-  date: todayISO(),
-  description: '',
-  billable: true,
-};
+function getInitialForm() {
+  return {
+    hours: '0.5',
+    date: getLocalDateString(),
+    description: '',
+    billable: true,
+  };
+}
 
 export default function TimeLogSection({ taskId, canWrite, currentUserId, onChange }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState(INITIAL_FORM);
+  const [form, setForm] = useState(getInitialForm);
   const [saving, setSaving] = useState(false);
   const [pendingId, setPendingId] = useState(null);
 
@@ -71,12 +68,12 @@ export default function TimeLogSection({ taskId, canWrite, currentUserId, onChan
       await createTimeEntry({
         task: taskId,
         hours,
-        date: form.date || todayISO(),
+        date: form.date || getLocalDateString(),
         description: form.description.trim(),
         billable: !!form.billable,
       });
       toast.success('Time logged');
-      setForm({ ...INITIAL_FORM, billable: form.billable });
+      setForm({ ...getInitialForm(), billable: form.billable });
       await fetchEntries();
       onChange?.();
     } catch (err) {

@@ -5,6 +5,15 @@ const User = require('../models/userModel');
 const Project = require('../models/projectModel');
 const auth = require('../middleware/authMiddleware');
 const { writeAudit } = require('../utils/audit');
+const { escapeRegex } = require('../utils/regex');
+const {
+  getProjectRole,
+  getTaskAccess,
+  canReadTask,
+  canWriteTask,
+  canCommentTask,
+  isTaskOwner,
+} = require('../utils/access');
 
 const router = express.Router();
 const ALLOWED_STATUSES = Note.NOTE_STATUSES || ['not_done', 'done', 'cancelled'];
@@ -170,9 +179,11 @@ async function recomputeParentProgress(parentId) {
   const subs = await Note.find({ parentTask: parentId, isDeleted: false })
     .select('progress status')
     .lean();
-  if (!subs.length) return;
-  const total = subs.reduce((acc, s) => acc + (Number(s.progress) || 0), 0);
-  const avg = Math.round(total / subs.length);
+  // Cancelled subtasks are out of scope, so they must not hold the parent below 100%.
+  const active = subs.filter((sub) => sub.status !== 'cancelled');
+  if (!active.length) return;
+  const total = active.reduce((acc, s) => acc + (Number(s.progress) || 0), 0);
+  const avg = Math.round(total / active.length);
   const status = avg >= 100 ? 'done' : 'not_done';
   await Note.updateOne(
     { _id: parentId, status: { $ne: 'cancelled' } },
@@ -255,33 +266,6 @@ function computeIsBlocked(populatedDependencies) {
   });
 }
 
-function ownerIdOf(note) {
-  return String(note?.user?._id || note?.user || '');
-}
-
-// Returns role string ('owner' | 'moderator' | 'editor' | 'reviewer' | 'viewer') | null
-function getProjectAccess(project, userId) {
-  if (!project) return null;
-  if (project.isDeleted) return null;
-  const uid = String(userId || '');
-  if (!uid) return null;
-  const ownerId = String(project.owner?._id || project.owner || '');
-  if (ownerId === uid) return 'owner';
-  const hit = Array.isArray(project.members)
-    ? project.members.find((m) => String(m?.user?._id || m?.user) === uid)
-    : null;
-  return hit?.role || null;
-}
-
-// Maps a project role to a note-access permission level.
-function projectRoleToAccess(role) {
-  if (!role) return null;
-  if (role === 'owner' || role === 'moderator' || role === 'editor') return 'write';
-  if (role === 'reviewer') return 'comment';
-  if (role === 'viewer') return 'read';
-  return null;
-}
-
 // Looks up a project by id and returns the user's role in it, or null.
 // Used when we only have a projectId (not a populated doc).
 async function fetchProjectRole(projectId, userId) {
@@ -289,38 +273,18 @@ async function fetchProjectRole(projectId, userId) {
   const project = await Project.findOne({ _id: projectId, isDeleted: false })
     .select('owner members isDeleted')
     .lean();
-  return getProjectAccess(project, userId);
+  return getProjectRole(project, userId);
 }
 
-function getAccess(note, userId) {
-  const uid = String(userId || '');
-  if (!uid) return null;
-  if (ownerIdOf(note) === uid) return 'owner';
-
-  const isAssignee = Array.isArray(note?.assignees)
-    ? note.assignees.some((a) => String(a?._id || a) === uid)
-    : false;
-  if (isAssignee) return 'write';
-
-  const projAccess = getProjectAccess(note?.project, userId);
-  const mapped = projectRoleToAccess(projAccess);
-  if (mapped) return mapped;
-
-  return null;
-}
-
-function canRead(note, userId) {
-  return !!getAccess(note, userId);
-}
-
-function canWrite(note, userId) {
-  const access = getAccess(note, userId);
-  return access === 'owner' || access === 'write';
-}
-
-function canComment(note, userId) {
-  const access = getAccess(note, userId);
-  return access === 'owner' || access === 'write' || access === 'comment';
+function getSearchClause(search) {
+  const pattern = escapeRegex(String(search).trim());
+  return {
+    $or: [
+      { title: { $regex: pattern, $options: 'i' } },
+      { content: { $regex: pattern, $options: 'i' } },
+      { category: { $regex: pattern, $options: 'i' } },
+    ],
+  };
 }
 
 function toOwnerDto(populatedUserOrId) {
@@ -365,22 +329,8 @@ function toAssigneesDto(arr) {
 }
 
 function mapNoteForList(noteLean, reqUserId, extras = {}) {
-  const uid = String(reqUserId);
   const ownerId = String(noteLean?.user?._id || noteLean?.user || '');
-  const isOwner = ownerId === uid;
-
-  const isAssignee = Array.isArray(noteLean?.assignees)
-    ? noteLean.assignees.some((a) => String(a?._id || a) === uid)
-    : false;
-  const projAccess = getProjectAccess(noteLean?.project, reqUserId);
-
-  let access = null;
-  if (isOwner) access = 'owner';
-  else if (isAssignee) access = 'write';
-  else {
-    const mapped = projectRoleToAccess(projAccess);
-    if (mapped) access = mapped;
-  }
+  const access = getTaskAccess(noteLean, reqUserId);
 
   const depsArr = Array.isArray(noteLean.dependencies) ? noteLean.dependencies : [];
   const depsPopulated = depsArr.length && typeof depsArr[0] === 'object' && depsArr[0] !== null && 'status' in depsArr[0];
@@ -672,16 +622,7 @@ router.get('/', async (req, res) => {
       and.push({ category: normalizedCategory });
     }
 
-    if (search && String(search).trim()) {
-      const keyword = String(search).trim();
-      and.push({
-        $or: [
-          { title: { $regex: keyword, $options: 'i' } },
-          { content: { $regex: keyword, $options: 'i' } },
-          { category: { $regex: keyword, $options: 'i' } },
-        ],
-      });
-    }
+    if (search && String(search).trim()) and.push(getSearchClause(search));
 
     const query = { $and: and };
 
@@ -696,12 +637,14 @@ router.get('/', async (req, res) => {
     const subtaskStats = await attachSubtaskStats(notes);
     const blockedMap = await computeBlockedMap(notes);
 
-    const mapped = notes.map((n) =>
-      mapNoteForList(n, uid, {
-        subtaskStats: subtaskStats.get(String(n._id)) || { total: 0, done: 0 },
-        isBlocked: blockedMap.get(String(n._id)) || false,
-      }),
-    );
+    const mapped = notes
+      .map((n) =>
+        mapNoteForList(n, uid, {
+          subtaskStats: subtaskStats.get(String(n._id)) || { total: 0, done: 0 },
+          isBlocked: blockedMap.get(String(n._id)) || false,
+        }),
+      )
+      .filter((note) => note.access);
 
     return res.json({ total: mapped.length, notes: mapped });
   } catch (err) {
@@ -728,16 +671,7 @@ router.get('/trash', async (req, res) => {
       and.push({ user: uid });
     }
 
-    if (search && String(search).trim()) {
-      const keyword = String(search).trim();
-      and.push({
-        $or: [
-          { title: { $regex: keyword, $options: 'i' } },
-          { content: { $regex: keyword, $options: 'i' } },
-          { category: { $regex: keyword, $options: 'i' } },
-        ],
-      });
-    }
+    if (search && String(search).trim()) and.push(getSearchClause(search));
 
     const notes = await Note.find({ $and: and })
       .select('-comments')
@@ -749,12 +683,14 @@ router.get('/trash', async (req, res) => {
 
     const stats = await attachSubtaskStats(notes);
     const blockedMap = await computeBlockedMap(notes);
-    const mapped = notes.map((n) =>
-      mapNoteForList(n, uid, {
-        subtaskStats: stats.get(String(n._id)) || { total: 0, done: 0 },
-        isBlocked: blockedMap.get(String(n._id)) || false,
-      }),
-    );
+    const mapped = notes
+      .map((n) =>
+        mapNoteForList(n, uid, {
+          subtaskStats: stats.get(String(n._id)) || { total: 0, done: 0 },
+          isBlocked: blockedMap.get(String(n._id)) || false,
+        }),
+      )
+      .filter((note) => note.access);
 
     return res.json({ total: mapped.length, notes: mapped });
   } catch (err) {
@@ -779,7 +715,7 @@ router.get('/:id', async (req, res) => {
 
     if (!note) return res.status(404).json({ message: 'Note not found' });
 
-    const access = getAccess(note, req.userId);
+    const access = getTaskAccess(note, req.userId);
     if (!access) return res.status(403).json({ message: 'Forbidden' });
 
     const stats = await attachSubtaskStats([note]);
@@ -827,9 +763,10 @@ router.put('/:id', async (req, res) => {
 
     if (!note) return res.status(404).json({ message: 'Note not found' });
 
-    if (!canWrite(note, req.userId)) {
+    if (!canWriteTask(note, req.userId)) {
       return res.status(403).json({ message: 'You do not have permission to edit this task.' });
     }
+    const editorAccess = getTaskAccess(note, req.userId);
 
     // Allow moving a note to a different project; requester must be write-member of the target
     if (projectId !== undefined) {
@@ -909,6 +846,7 @@ router.put('/:id', async (req, res) => {
       note.deadline = parsedDeadline;
     }
 
+    let isReopenedParent = false;
     if (status !== undefined) {
       const normalizedStatus = normalizeStatus(status);
       if (!normalizedStatus || !ALLOWED_STATUSES.includes(normalizedStatus)) {
@@ -917,13 +855,14 @@ router.put('/:id', async (req, res) => {
         });
       }
 
-      if (isParent && (normalizedStatus === 'done' || normalizedStatus === 'not_done')) {
+      isReopenedParent = isParent && note.status === 'cancelled' && normalizedStatus !== 'cancelled';
+      if (isParent && !isReopenedParent && normalizedStatus !== 'cancelled') {
         return res.status(400).json({
           message: 'A parent task\'s status follows its subtasks. Only "cancelled" can be set directly.',
         });
       }
 
-      note.status = normalizedStatus;
+      note.status = isReopenedParent ? 'not_done' : normalizedStatus;
       if (!isParent && normalizedStatus === 'done' && progress === undefined) note.progress = 100;
       if (!isParent && normalizedStatus === 'not_done' && progress === undefined) note.progress = 0;
     }
@@ -1002,6 +941,7 @@ router.put('/:id', async (req, res) => {
     }
     await note.save();
 
+    if (isReopenedParent) await recomputeParentProgress(note._id);
     if (note.parentTask) await recomputeParentProgress(note.parentTask);
     if (previousParent && previousParent !== String(note.parentTask || '')) {
       await recomputeParentProgress(previousParent);
@@ -1011,9 +951,7 @@ router.put('/:id', async (req, res) => {
       action: 'NOTE_EDIT',
       targetType: 'NOTE',
       targetId: String(note._id),
-      metadata: {
-        editorAccess: getAccess(note, req.userId),
-      },
+      metadata: { editorAccess },
     });
 
     const populated = await Note.findById(note._id)
@@ -1058,20 +996,21 @@ router.patch('/:id/status', async (req, res) => {
       .populate('project', 'name isPersonal owner members isDeleted');
 
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canWrite(note, req.userId)) {
+    if (!canWriteTask(note, req.userId)) {
       return res.status(403).json({ message: 'You do not have permission to edit this task.' });
     }
 
     const subCount = await countSubtasks(note._id);
     const isParent = subCount > 0;
 
-    if (isParent && (normalizedStatus === 'done' || normalizedStatus === 'not_done')) {
+    const isReopenedParent = isParent && note.status === 'cancelled' && normalizedStatus !== 'cancelled';
+    if (isParent && !isReopenedParent && normalizedStatus !== 'cancelled') {
       return res.status(400).json({
         message: 'A parent task\'s status follows its subtasks. Only "cancelled" can be set directly.',
       });
     }
 
-    note.status = normalizedStatus;
+    note.status = isReopenedParent ? 'not_done' : normalizedStatus;
     if (!isParent && normalizedStatus === 'done') note.progress = 100;
     if (!isParent && normalizedStatus === 'not_done') note.progress = 0;
 
@@ -1080,13 +1019,14 @@ router.patch('/:id/status', async (req, res) => {
     }
     await note.save();
 
+    if (isReopenedParent) await recomputeParentProgress(note._id);
     if (note.parentTask) await recomputeParentProgress(note.parentTask);
 
     await writeAudit(req, {
       action: 'NOTE_EDIT',
       targetType: 'NOTE',
       targetId: String(note._id),
-      metadata: { editorAccess: getAccess(note, req.userId), status: note.status, progress: note.progress },
+      metadata: { editorAccess: getTaskAccess(note, req.userId), status: note.status, progress: note.progress },
     });
 
     return res.json({ message: 'Status updated', note });
@@ -1103,10 +1043,11 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ message: 'Invalid note id' });
     }
 
-    const note = await Note.findOne({ _id: id, isDeleted: false });
+    const note = await Note.findOne({ _id: id, isDeleted: false })
+      .populate('project', 'owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found' });
 
-    if (ownerIdOf(note) !== String(req.userId)) {
+    if (!isTaskOwner(note, req.userId)) {
       return res.status(403).json({ message: 'Only the task owner can move it to trash.' });
     }
 
@@ -1147,10 +1088,11 @@ router.patch('/:id/restore', async (req, res) => {
       return res.status(400).json({ message: 'Invalid note id' });
     }
 
-    const note = await Note.findOne({ _id: id, isDeleted: true });
+    const note = await Note.findOne({ _id: id, isDeleted: true })
+      .populate('project', 'owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found in trash' });
 
-    if (ownerIdOf(note) !== String(req.userId)) {
+    if (!isTaskOwner(note, req.userId)) {
       return res.status(403).json({ message: 'Only the task owner can restore it.' });
     }
 
@@ -1190,10 +1132,11 @@ router.delete('/:id/hard', async (req, res) => {
       return res.status(400).json({ message: 'Invalid note id' });
     }
 
-    const note = await Note.findOne({ _id: id, isDeleted: true });
+    const note = await Note.findOne({ _id: id, isDeleted: true })
+      .populate('project', 'owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found in trash' });
 
-    if (ownerIdOf(note) !== String(req.userId)) {
+    if (!isTaskOwner(note, req.userId)) {
       return res.status(403).json({ message: 'Only the task owner can permanently delete it.' });
     }
 
@@ -1232,7 +1175,7 @@ router.get('/:id/comments', async (req, res) => {
       .populate('project', 'name isPersonal owner members isDeleted');
 
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canRead(note, req.userId)) return res.status(403).json({ message: 'Forbidden' });
+    if (!canReadTask(note, req.userId)) return res.status(403).json({ message: 'Forbidden' });
 
     const comments = Array.isArray(note.comments) ? [...note.comments] : [];
     comments.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -1255,7 +1198,7 @@ router.post('/:id/comments', async (req, res) => {
       .populate('project', 'name isPersonal owner members isDeleted');
 
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canComment(note, req.userId)) {
+    if (!canCommentTask(note, req.userId)) {
       return res.status(403).json({ message: 'You do not have permission to comment on this task.' });
     }
 
@@ -1288,7 +1231,7 @@ router.get('/:id/subtasks', async (req, res) => {
     const parent = await Note.findOne({ _id: id, isDeleted: false })
       .populate('project', 'name isPersonal owner members isDeleted');
     if (!parent) return res.status(404).json({ message: 'Note not found' });
-    if (!canRead(parent, req.userId)) return res.status(403).json({ message: 'Forbidden' });
+    if (!canReadTask(parent, req.userId)) return res.status(403).json({ message: 'Forbidden' });
 
     const subs = await Note.find({ parentTask: id, isDeleted: false })
       .select('-comments')
@@ -1322,7 +1265,7 @@ router.get('/:id/dependencies/blocked-by', async (req, res) => {
     const note = await Note.findOne({ _id: id, isDeleted: false })
       .populate('project', 'name isPersonal owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canRead(note, req.userId)) return res.status(403).json({ message: 'Forbidden' });
+    if (!canReadTask(note, req.userId)) return res.status(403).json({ message: 'Forbidden' });
 
     const deps = await Note.find({ _id: { $in: note.dependencies || [] }, isDeleted: false })
       .select('title content status progress priority deadline project')
@@ -1353,7 +1296,7 @@ router.get('/:id/dependencies/blocks', async (req, res) => {
     const note = await Note.findOne({ _id: id, isDeleted: false })
       .populate('project', 'name isPersonal owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canRead(note, req.userId)) return res.status(403).json({ message: 'Forbidden' });
+    if (!canReadTask(note, req.userId)) return res.status(403).json({ message: 'Forbidden' });
 
     const blocks = await Note.find({ dependencies: id, isDeleted: false })
       .select('title content status progress priority deadline')
@@ -1388,7 +1331,7 @@ router.put('/:id/dependencies', async (req, res) => {
     const note = await Note.findOne({ _id: id, isDeleted: false })
       .populate('project', 'name isPersonal owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canWrite(note, req.userId)) {
+    if (!canWriteTask(note, req.userId)) {
       return res.status(403).json({ message: 'You do not have permission to edit this task.' });
     }
 
@@ -1422,7 +1365,7 @@ router.post('/:id/dependencies/:depId', async (req, res) => {
     const note = await Note.findOne({ _id: id, isDeleted: false })
       .populate('project', 'name isPersonal owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canWrite(note, req.userId)) {
+    if (!canWriteTask(note, req.userId)) {
       return res.status(403).json({ message: 'You do not have permission to edit this task.' });
     }
 
@@ -1461,7 +1404,7 @@ router.delete('/:id/dependencies/:depId', async (req, res) => {
     const note = await Note.findOne({ _id: id, isDeleted: false })
       .populate('project', 'name isPersonal owner members isDeleted');
     if (!note) return res.status(404).json({ message: 'Note not found' });
-    if (!canWrite(note, req.userId)) {
+    if (!canWriteTask(note, req.userId)) {
       return res.status(403).json({ message: 'You do not have permission to edit this task.' });
     }
 
